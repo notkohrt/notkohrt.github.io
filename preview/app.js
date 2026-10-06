@@ -468,7 +468,8 @@
 
     view.on('pointertap', e => {
       e.stopPropagation();
-      focusNode(node.id);
+      if (state.focusedId === node.id) clearFocus();
+      else focusNode(node.id);
     });
 
     view.on('pointerover', () => {
