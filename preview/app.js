@@ -1087,12 +1087,6 @@
     const q = norm($('search-input').value);
     if (q && !(norm(node.name).includes(q) || norm(node.description).includes(q))) return false;
 
-    const color = $('color-filter').value;
-    if (color !== 'all') {
-      const universalColors = new Set(['shared', 'colorless', 'status', 'curse', 'token', 'event', 'quest']);
-      if (node.color && node.color !== color && !universalColors.has(node.color)) return false;
-    }
-
     const rarity = $('rarity-filter').value;
     if (rarity !== 'all' && ['card', 'relic', 'potion', 'enchantment'].includes(node.type)) {
       if (node.rarity !== rarity) return false;
@@ -1149,8 +1143,36 @@
     const baseAllowed = new Set(state.nodes.filter(matchesFilters).map(n => n.id));
     let visible = new Set(baseAllowed);
 
-    if (state.viewMode === 'local' && state.focusedId && baseAllowed.has(state.focusedId)) {
-      visible = collectLocal(state.focusedId, baseAllowed);
+    const color = $('color-filter').value;
+    if (color !== 'all') {
+      const contextColors = new Set(['shared', 'colorless', 'status', 'curse', 'token', 'event', 'quest']);
+      const seeds = new Set(
+        state.nodes
+          .filter(node => baseAllowed.has(node.id) && node.color === color)
+          .map(node => node.id)
+      );
+
+      visible = new Set(seeds);
+
+      for (const edge of state.edges) {
+        let otherId = null;
+
+        if (seeds.has(edge.source)) otherId = edge.target;
+        else if (seeds.has(edge.target)) otherId = edge.source;
+
+        if (!otherId || !baseAllowed.has(otherId)) continue;
+
+        const other = state.byId.get(otherId);
+        if (!other) continue;
+
+        if (!other.color || other.color === color || contextColors.has(other.color)) {
+          visible.add(otherId);
+        }
+      }
+    }
+
+    if (state.viewMode === 'local' && state.focusedId && visible.has(state.focusedId)) {
+      visible = collectLocal(state.focusedId, visible);
     }
 
     let visibleEdges = state.edges.filter(e => visible.has(e.source) && visible.has(e.target));
@@ -1183,7 +1205,8 @@
     rebuildScene();
 
     const modeLabel = state.viewMode === 'local' ? 'local · depth ' + state.depth : 'global';
-    $('graph-summary').textContent = modeLabel + ' · ' + state.visibleNodes.length + ' nodes · ' + state.visibleEdges.length + ' links';
+    const colorLabel = $('color-filter').value !== 'all' ? ' · ' + $('color-filter').value : '';
+    $('graph-summary').textContent = modeLabel + colorLabel + ' · ' + state.visibleNodes.length + ' nodes · ' + state.visibleEdges.length + ' links';
     $('selection-hint').classList.toggle('hidden', !(state.viewMode === 'local' && !state.focusedId));
 
     if (shouldFit) setTimeout(fitGraph, 160);
