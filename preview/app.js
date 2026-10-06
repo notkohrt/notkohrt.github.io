@@ -443,9 +443,7 @@
     const t = norm(text);
     const k = norm(keywordName);
 
-    if (k === 'exhaust' && /\bexhaust\s+pile\b/.test(t) && !/\bexhaust(?:s|ed|ing)?\b(?!\s+pile)/.test(t)) {
-      return null;
-    }
+    if (k === 'exhaust') return null;
 
     if (k === 'sly' && /\b(?:add|gain|gains)\b[^.\n]{0,36}\bsly\b/.test(t)) return 'grants';
     if (k === 'retain' && /\b(?:gain|gains|retain)\b[^.\n]{0,36}\bretain\b|\bretain\b[^.\n]{0,24}\bcard/.test(t)) return 'grants';
@@ -642,14 +640,26 @@
       addPileRelations(source, text, pushEdge);
 
       for (const [effectId, effect] of effects) {
-        if (effect.patterns.some(pattern => pattern.test(text))) {
-          pushEdge(
-            source.id,
-            nodeId('effect', effectId),
-            inferEffectRelation(effectId, text, effect.relation),
-            'derived'
+        if (!effect.patterns.some(pattern => pattern.test(text))) continue;
+
+        const relation = inferEffectRelation(effectId, text, effect.relation);
+
+        // Plain damage/play edges turn the graph into high-degree hubs without
+        // adding interaction meaning. Keep modifiers, triggers, requirements, etc.
+        if (effectId === 'DAMAGE' && relation === 'deals damage') continue;
+        if (effectId === 'PLAY_CARD' && relation === 'plays cards') continue;
+
+        // Prefer a concrete generated-card edge over a second generic Create Card edge.
+        if (effectId === 'CREATE_CARD') {
+          const hasConcreteCreate = edges.some(edge =>
+            edge.source === source.id &&
+            edge.relation === 'creates' &&
+            byId.get(edge.target)?.type !== 'effect'
           );
+          if (hasConcreteCreate) continue;
         }
+
+        pushEdge(source.id, nodeId('effect', effectId), relation, 'derived');
       }
 
       const block = byId.get(nodeId('mechanic','BLOCK'));
