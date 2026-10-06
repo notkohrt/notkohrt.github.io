@@ -272,39 +272,100 @@
     return nodes;
   }
 
-  function containsEntityName(text, name) {
-    const hay = norm(text);
-    const needle = norm(name);
-    if (!hay || !needle || needle.length < 4) return false;
+  function entityAliases(name) {
+    const base = norm(name).replace(/[{}]/g, '').trim();
+    if (!base) return [];
 
-    let from = 0;
-    while (from < hay.length) {
-      const at = hay.indexOf(needle, from);
-      if (at === -1) return false;
+    const aliases = new Set([base]);
 
-      const before = at === 0 ? '' : hay[at - 1];
-      const afterPos = at + needle.length;
-      const after = afterPos >= hay.length ? '' : hay[afterPos];
-      const word = /[a-z0-9]/;
+    if (!base.endsWith('s')) aliases.add(base + 's');
+    if (/[^aeiou]y$/.test(base)) aliases.add(base.slice(0, -1) + 'ies');
+    if (/(?:s|x|z|ch|sh)$/.test(base)) aliases.add(base + 'es');
 
-      if ((!before || !word.test(before)) && (!after || !word.test(after))) return true;
-      from = at + needle.length;
+    return [...aliases].sort((a, b) => b.length - a.length);
+  }
+
+  function findEntityMentions(text, name) {
+    const hay = norm(text).replace(/[{}]/g, '');
+    if (!hay) return [];
+
+    const found = [];
+
+    for (const alias of entityAliases(name)) {
+      let from = 0;
+
+      while (from < hay.length) {
+        const at = hay.indexOf(alias, from);
+        if (at === -1) break;
+
+        const before = at === 0 ? '' : hay[at - 1];
+        const afterPos = at + alias.length;
+        const after = afterPos >= hay.length ? '' : hay[afterPos];
+        const word = /[a-z0-9]/;
+
+        if ((!before || !word.test(before)) && (!after || !word.test(after))) {
+          found.push({ index: at, alias });
+        }
+
+        from = at + alias.length;
+      }
     }
 
-    return false;
+    return found
+      .sort((a, b) => a.index - b.index || b.alias.length - a.alias.length)
+      .filter((item, index, items) =>
+        index === 0 || item.index !== items[index - 1].index
+      );
+  }
+
+  function findEntityMention(text, name) {
+    return findEntityMentions(text, name)[0] || null;
+  }
+
+  function containsEntityName(text, name) {
+    return Boolean(findEntityMention(text, name));
+  }
+
+  function inferRelationAt(text, mention) {
+    const t = norm(text).replace(/[{}]/g, '');
+    const before = t.slice(Math.max(0, mention.index - 72), mention.index);
+    const after = t.slice(mention.index + mention.alias.length, mention.index + mention.alias.length + 72);
+    const clauseBefore = before.split(/[.\n]/).pop() || before;
+    const clauseAfter = after.split(/[.\n]/)[0] || after;
+
+    if (/\b(?:whenever|when|each time|if|every\s+\d+\s+times)\b/.test(clauseBefore) &&
+        /\b(?:play|apply|draw|discard|exhaust|gain|lose|create|deal)\b/.test(clauseBefore)) {
+      return 'triggers on';
+    }
+
+    if (/\b(?:add|create|shuffle|put)\b[^.\n]{0,42}$/.test(clauseBefore)) return 'creates';
+    if (/\btransform\b[^.\n]{0,34}$/.test(clauseBefore)) return 'transforms';
+    if (/\b(?:apply|inflict)\b[^.\n]{0,30}$/.test(clauseBefore)) return 'applies';
+    if (/\bequal to\b[^.\n]{0,24}$/.test(clauseBefore)) return 'scales with';
+    if (/\bgain\b[^.\n]{0,28}$/.test(clauseBefore)) return 'grants';
+    if (/\b(?:play|plays|played|playing)\b[^.\n]{0,26}$/.test(clauseBefore)) return 'plays';
+    if (/\bdiscard(?:s|ed|ing)?\b[^.\n]{0,26}$/.test(clauseBefore)) return 'discards';
+    if (/\bexhaust(?:s|ed|ing)?\b[^.\n]{0,26}$/.test(clauseBefore)) return 'exhausts';
+
+    if (/^\s*(?:is\s+)?triggered\b/.test(clauseAfter)) return 'triggers';
+    if (/^\s*(?:(?:enemies|creatures|cards|shivs?)\s+)?(?:now\s+)?(?:deal|deals|gain|gains|take|takes|cost|costs|hit|hits|reduce|reduces|increase|increases)\b/.test(clauseAfter)) {
+      return 'modifies';
+    }
+    if (/\bwith\b[^.\n]{0,14}$/.test(clauseBefore) && /\b(?:deal|deals|take|takes|damage|more|less|double)\b/.test(clauseAfter)) {
+      return 'modifies';
+    }
+    if (/\b(?:has|have|with|requires?)\b[^.\n]{0,22}$/.test(clauseBefore)) return 'requires';
+
+    if (/\b(?:additional|double|more|less|increase|reduce|damage)\b/.test(clauseAfter)) return 'modifies';
+    return 'references';
+  }
+
+  function inferRelations(text, targetName) {
+    return [...new Set(findEntityMentions(text, targetName).map(mention => inferRelationAt(text, mention)))];
   }
 
   function inferRelation(text, targetName) {
-    const t = norm(text);
-    const n = norm(targetName);
-    const index = t.indexOf(n);
-    const around = index >= 0 ? t.slice(Math.max(0, index - 58), index + n.length + 58) : t;
-
-    if (/add|create|put .* hand|shuffle|transform/.test(around)) return 'creates / moves';
-    if (/gain|apply|channel|inflict/.test(around)) return 'grants / applies';
-    if (/deal|damage|increase|additional/.test(around)) return 'modifies';
-    if (/whenever|when |if |start of|end of/.test(around)) return 'references / triggers';
-    return 'references';
+    return inferRelations(text, targetName)[0] || 'references';
   }
 
   function buildEdges(nodes, manualLinks, cardPowers) {
@@ -369,13 +430,24 @@
       for (const target of candidates) {
         if (target.id === source.id) continue;
         if (containsEntityName(text, target.name)) {
-          pushEdge(source.id, target.id, inferRelation(text, target.name), 'description');
+          for (const relation of inferRelations(text, target.name)) {
+            const provenance = ['creates','transforms','applies','scales with','grants','plays','discards','exhausts','requires','triggers','triggers on','modifies'].includes(relation)
+              ? 'derived'
+              : 'description';
+            pushEdge(source.id, target.id, relation, provenance);
+          }
         }
       }
 
       for (const keyword of keywords) {
         if (containsEntityName(text, keyword.name)) {
-          pushEdge(source.id, keyword.id, 'uses keyword', 'description');
+          const relation = inferRelation(text, keyword.name);
+          pushEdge(
+            source.id,
+            keyword.id,
+            relation === 'references' ? 'uses keyword' : relation,
+            relation === 'references' ? 'description' : 'derived'
+          );
         }
       }
 
@@ -394,6 +466,19 @@
       if (energy && /\blose(?:s)?\b[^.\n]*(?:\[E\]|Energy)/i.test(text)) pushEdge(source.id, energy.id, 'consumes', 'derived');
       if (hp && /\bheal(?:s|ed|ing)?\b/i.test(text)) pushEdge(source.id, hp.id, 'restores', 'derived');
       if (hp && /\blose(?:s)?\b[^.\n]*\bHP\b/i.test(text)) pushEdge(source.id, hp.id, 'reduces', 'derived');
+    }
+
+    const ontologyEdges = [
+      ['effect:DRAW', 'mechanic:DRAW_PILE', 'draws from'],
+      ['effect:DISCARD', 'mechanic:DISCARD_PILE', 'moves to'],
+      ['keyword:EXHAUST', 'mechanic:EXHAUST_PILE', 'moves to'],
+      ['effect:HEAL', 'mechanic:HIT_POINTS', 'restores'],
+      ['effect:LOSE_HP', 'mechanic:HIT_POINTS', 'reduces'],
+      ['effect:COST_CHANGE', 'mechanic:ENERGY', 'modifies cost']
+    ];
+
+    for (const [source, target, relation] of ontologyEdges) {
+      pushEdge(source, target, relation, 'explicit');
     }
 
     for (const card of cards) {
