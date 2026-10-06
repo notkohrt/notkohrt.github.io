@@ -455,6 +455,7 @@
 
     view.on('pointerdown', e => {
       e.stopPropagation();
+      if (state.touchPointers.size >= 2) return;
       state.draggingNode = node;
       const p = state.world.toLocal(e.global);
       node.fx = node.x;
@@ -700,6 +701,7 @@
   }
 
   function onStagePointerDown(e) {
+    if (state.touchPointers.size >= 2) return;
     if (state.draggingNode) return;
     state.panning = true;
     state.panStart = { x: e.global.x, y: e.global.y };
@@ -707,6 +709,8 @@
   }
 
   function onStagePointerMove(e) {
+    if (state.touchPointers.size >= 2) return;
+
     if (state.draggingNode) {
       const p = state.world.toLocal(e.global);
       state.draggingNode.fx = p.x + (state.draggingNode._dragOffsetX || 0);
@@ -748,7 +752,15 @@
     if (state.touchPointers.size === 2) {
       e.preventDefault();
       state.panning = false;
-      state.draggingNode = null;
+
+      if (state.draggingNode) {
+        if (!$('pin-dragged').checked) {
+          state.draggingNode.fx = null;
+          state.draggingNode.fy = null;
+        }
+        state.draggingNode = null;
+        if (state.simulation) state.simulation.alphaTarget(0);
+      }
 
       const points = [...state.touchPointers.values()];
       const dx = points[1].x - points[0].x;
