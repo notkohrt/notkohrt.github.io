@@ -12,7 +12,9 @@ const SOURCES = {
   power: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/powers.json',
   potion: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/potions.json',
   enchantment: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/enchantments.json',
-  keyword: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/keywords.json'
+  keyword: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/keywords.json',
+  mechanics: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/mechanics.json',
+  cardPowers: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/card_powers.json'
 };
 
 const FOLDERS = {
@@ -21,7 +23,9 @@ const FOLDERS = {
   power: 'Powers',
   potion: 'Potions',
   enchantment: 'Enchantments',
-  keyword: 'Keywords'
+  keyword: 'Keywords',
+  mechanic: 'Mechanics',
+  tag: 'Tags'
 };
 
 const START = '<!-- CURATED START -->';
@@ -56,7 +60,8 @@ function normalizeData(raw) {
     nodes.push({
       id: nodeId('card', card.id), sourceId: card.id, type: 'card', name: card.name,
       description: card.description || '', color: card.color || 'unknown', rarity: card.rarity || '',
-      cardType: card.type || '', cost: card.cost, keywords: card.keywords || [], tags: card.tags || []
+      cardType: card.type || '', cost: card.cost, keywords: card.keywords || [], tags: card.tags || [],
+      target: card.target || '', vars: card.vars || {}, upgrade: card.upgrade || {}
     });
   }
 
@@ -92,6 +97,33 @@ function normalizeData(raw) {
     nodes.push({
       id: nodeId('keyword', keyword.id), sourceId: keyword.id, type: 'keyword',
       name: (keyword.names && keyword.names[0]) || keyword.id, description: keyword.description || ''
+    });
+  }
+
+  for (const group of ['core_concepts', 'orbs']) {
+    for (const item of (raw.mechanics && raw.mechanics[group]) || []) {
+      const name = String(item.title || item.name || item.id || '')
+        .replace(/\s*\([^)]*\)\s*$/, '')
+        .trim();
+      nodes.push({
+        id: nodeId('mechanic', item.id || slug(name)),
+        sourceId: item.id || slug(name),
+        type: 'mechanic',
+        name,
+        description: item.description || '',
+        mechanicGroup: group
+      });
+    }
+  }
+
+  const tags = new Set();
+  for (const card of raw.card) {
+    for (const tag of card.tags || []) tags.add(tag);
+  }
+  for (const tag of tags) {
+    nodes.push({
+      id: nodeId('tag', slug(tag)), sourceId: slug(tag), type: 'tag',
+      name: tag, description: 'Card tag used by Slay the Spire 2.'
     });
   }
 
@@ -133,7 +165,7 @@ function inferRelation(text, targetName) {
   return 'references';
 }
 
-function buildDetectedEdges(nodes) {
+function buildDetectedEdges(nodes, cardPowers) {
   const byId = new Map(nodes.map(n => [n.id, n]));
   const cards = nodes.filter(n => n.type === 'card');
   const powers = nodes.filter(n => n.type === 'power');
@@ -153,6 +185,16 @@ function buildDetectedEdges(nodes) {
     for (const keyword of card.keywords || []) {
       const target = nodeId('keyword', slug(keyword));
       if (byId.has(target)) push(card.id, target, 'has keyword', 'explicit');
+    }
+
+    for (const tag of card.tags || []) {
+      const target = nodeId('tag', slug(tag));
+      if (byId.has(target)) push(card.id, target, 'has tag', 'explicit');
+    }
+
+    for (const power of (cardPowers && cardPowers[card.sourceId]) || []) {
+      const target = nodeId('power', power.id);
+      if (byId.has(target)) push(card.id, target, 'applies / grants', 'explicit');
     }
   }
 
@@ -222,6 +264,9 @@ function noteContent(node, nodePath, detectedOutgoing, curated) {
     node.cardType ? 'card_type: ' + yaml(node.cardType) : null,
     node.cost !== undefined ? 'cost: ' + yaml(node.cost) : null,
     node.keywords && node.keywords.length ? 'keywords: ' + yaml(node.keywords) : null,
+    node.tags && node.tags.length ? 'tags: ' + yaml(node.tags) : null,
+    node.target ? 'target: ' + yaml(node.target) : null,
+    node.mechanicGroup ? 'mechanic_group: ' + yaml(node.mechanicGroup) : null,
     '---',
     '',
     '# ' + node.name,
@@ -283,7 +328,7 @@ async function main() {
     }
   }
 
-  const detected = buildDetectedEdges(nodes);
+  const detected = buildDetectedEdges(nodes, raw.cardPowers);
   const outgoing = new Map(nodes.map(n => [n.id, []]));
 
   for (const edge of detected) {
