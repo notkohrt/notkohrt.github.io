@@ -5,7 +5,9 @@
     power: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/powers.json',
     potion: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/potions.json',
     enchantment: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/enchantments.json',
-    keyword: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/keywords.json'
+    keyword: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/keywords.json',
+    mechanics: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/mechanics.json',
+    cardPowers: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/card_powers.json'
   };
 
   const TYPE_COLORS = {
@@ -14,7 +16,9 @@
     power: 0xa276bd,
     potion: 0x65a7a1,
     enchantment: 0xc9829f,
-    keyword: 0x7f9a72
+    keyword: 0x7f9a72,
+    mechanic: 0x6f8fb5,
+    tag: 0x9a875f
   };
 
   const TYPE_CSS = {
@@ -23,7 +27,9 @@
     power: '#a276bd',
     potion: '#65a7a1',
     enchantment: '#c9829f',
-    keyword: '#7f9a72'
+    keyword: '#7f9a72',
+    mechanic: '#6f8fb5',
+    tag: '#9a875f'
   };
 
   const TYPE_LABELS = {
@@ -32,7 +38,9 @@
     power: 'Powers',
     potion: 'Potions',
     enchantment: 'Enchantments',
-    keyword: 'Keywords'
+    keyword: 'Keywords',
+    mechanic: 'Mechanics',
+    tag: 'Tags'
   };
 
   const TYPE_FOLDERS = {
@@ -41,7 +49,9 @@
     power: 'Powers',
     potion: 'Potions',
     enchantment: 'Enchantments',
-    keyword: 'Keywords'
+    keyword: 'Keywords',
+    mechanic: 'Mechanics',
+    tag: 'Tags'
   };
 
   const state = {
@@ -80,6 +90,9 @@
     panning: false,
     panStart: null,
     worldStart: null,
+
+    touchPointers: new Map(),
+    pinchStart: null,
 
     settings: {
       center: 0.012,
@@ -128,7 +141,11 @@
         cardType: card.type || '',
         cost: card.cost,
         keywords: card.keywords || [],
-        tags: card.tags || []
+        tags: card.tags || [],
+        target: card.target || '',
+        vars: card.vars || {},
+        upgrade: card.upgrade || {},
+        imageUrl: card.image_url || ''
       });
     }
 
@@ -164,7 +181,8 @@
         name: potion.name,
         description: potion.description || '',
         rarity: potion.rarity || '',
-        color: potion.color || ''
+        color: potion.color || '',
+        target: potion.target || ''
       });
     }
 
@@ -186,6 +204,37 @@
         type: 'keyword',
         name: (kw.names && kw.names[0]) || kw.id,
         description: kw.description || ''
+      });
+    }
+
+    const mechanicGroups = ['core_concepts', 'orbs'];
+    for (const group of mechanicGroups) {
+      for (const item of (raw.mechanics && raw.mechanics[group]) || []) {
+        const name = String(item.title || item.name || item.id || '')
+          .replace(/\s*\([^)]*\)\s*$/, '')
+          .trim();
+        nodes.push({
+          id: nodeId('mechanic', item.id || slug(name)),
+          sourceId: item.id || slug(name),
+          type: 'mechanic',
+          name,
+          description: item.description || '',
+          mechanicGroup: group
+        });
+      }
+    }
+
+    const tags = new Set();
+    for (const card of raw.card) {
+      for (const tag of card.tags || []) tags.add(tag);
+    }
+    for (const tag of tags) {
+      nodes.push({
+        id: nodeId('tag', slug(tag)),
+        sourceId: slug(tag),
+        type: 'tag',
+        name: tag,
+        description: 'Card tag used by Slay the Spire 2.'
       });
     }
 
@@ -227,7 +276,7 @@
     return 'references';
   }
 
-  function buildEdges(nodes, manualLinks) {
+  function buildEdges(nodes, manualLinks, cardPowers) {
     const edges = [];
     const edgeIds = new Set();
     const byId = new Map(nodes.map(n => [n.id, n]));
@@ -254,6 +303,16 @@
       for (const kw of card.keywords || []) {
         const target = nodeId('keyword', slug(kw));
         if (byId.has(target)) pushEdge(card.id, target, 'has keyword', 'explicit');
+      }
+
+      for (const tag of card.tags || []) {
+        const target = nodeId('tag', slug(tag));
+        if (byId.has(target)) pushEdge(card.id, target, 'has tag', 'explicit');
+      }
+
+      for (const power of (cardPowers && cardPowers[card.sourceId]) || []) {
+        const target = nodeId('power', power.id);
+        if (byId.has(target)) pushEdge(card.id, target, 'applies / grants', 'explicit');
       }
     }
 
@@ -351,6 +410,10 @@
     state.pixi.stage.on('pointerupoutside', onStagePointerUp);
 
     state.pixi.view.addEventListener('wheel', onWheel, { passive: false });
+    state.pixi.view.addEventListener('pointerdown', onCanvasPointerDown, { passive: false });
+    state.pixi.view.addEventListener('pointermove', onCanvasPointerMove, { passive: false });
+    state.pixi.view.addEventListener('pointerup', onCanvasPointerUp, { passive: false });
+    state.pixi.view.addEventListener('pointercancel', onCanvasPointerUp, { passive: false });
 
     new ResizeObserver(() => {
       state.pixi.stage.hitArea = state.pixi.screen;
@@ -676,6 +739,74 @@
     state.panning = false;
     state.panStart = null;
     state.worldStart = null;
+  }
+
+  function onCanvasPointerDown(e) {
+    if (e.pointerType !== 'touch') return;
+    state.touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (state.touchPointers.size === 2) {
+      e.preventDefault();
+      state.panning = false;
+      state.draggingNode = null;
+
+      const points = [...state.touchPointers.values()];
+      const dx = points[1].x - points[0].x;
+      const dy = points[1].y - points[0].y;
+      const midpoint = {
+        x: (points[0].x + points[1].x) / 2,
+        y: (points[0].y + points[1].y) / 2
+      };
+
+      const rect = state.pixi.view.getBoundingClientRect();
+      const localMid = { x: midpoint.x - rect.left, y: midpoint.y - rect.top };
+      const scale = state.world.scale.x;
+
+      state.pinchStart = {
+        distance: Math.max(1, Math.hypot(dx, dy)),
+        scale,
+        worldX: (localMid.x - state.world.position.x) / scale,
+        worldY: (localMid.y - state.world.position.y) / scale
+      };
+    }
+  }
+
+  function onCanvasPointerMove(e) {
+    if (e.pointerType !== 'touch' || !state.touchPointers.has(e.pointerId)) return;
+    state.touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (state.touchPointers.size !== 2 || !state.pinchStart) return;
+    e.preventDefault();
+
+    const points = [...state.touchPointers.values()];
+    const dx = points[1].x - points[0].x;
+    const dy = points[1].y - points[0].y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    const midpoint = {
+      x: (points[0].x + points[1].x) / 2,
+      y: (points[0].y + points[1].y) / 2
+    };
+
+    const rect = state.pixi.view.getBoundingClientRect();
+    const localMid = { x: midpoint.x - rect.left, y: midpoint.y - rect.top };
+    const newScale = Math.max(0.12, Math.min(3.2,
+      state.pinchStart.scale * (distance / state.pinchStart.distance)
+    ));
+
+    state.world.scale.set(newScale);
+    state.world.position.set(
+      localMid.x - state.pinchStart.worldX * newScale,
+      localMid.y - state.pinchStart.worldY * newScale
+    );
+  }
+
+  function onCanvasPointerUp(e) {
+    if (e.pointerType !== 'touch') return;
+    state.touchPointers.delete(e.pointerId);
+
+    if (state.touchPointers.size < 2) {
+      state.pinchStart = null;
+    }
   }
 
   function onWheel(e) {
@@ -1060,6 +1191,46 @@
     $('entity-meta').innerHTML = chips.map(c => '<span class="chip">' + htmlEsc(c) + '</span>').join('');
     $('entity-description').textContent = node.description || 'No description available.';
 
+    const facts = [];
+    if (node.type === 'card') {
+      if (node.target) facts.push(['Target', node.target]);
+      if (node.keywords && node.keywords.length) facts.push(['Keywords', node.keywords.join(', ')]);
+      if (node.tags && node.tags.length) facts.push(['Tags', node.tags.join(', ')]);
+      if (node.vars && Object.keys(node.vars).length) {
+        facts.push(['Base values', Object.entries(node.vars).map(([k,v]) => k.replace(/^power_/, '') + ': ' + v).join(' · ')]);
+      }
+    } else if (node.type === 'potion' && node.target) {
+      facts.push(['Target', node.target]);
+    } else if (node.type === 'mechanic' && node.mechanicGroup) {
+      facts.push(['Mechanic group', node.mechanicGroup.replace(/_/g, ' ')]);
+    }
+
+    if (facts.length) {
+      $('entity-facts').classList.remove('hidden');
+      $('entity-facts').innerHTML = facts.map(([label, value]) =>
+        '<div class="fact-card"><div class="fact-label">' + htmlEsc(label) + '</div><div class="fact-value">' + htmlEsc(value) + '</div></div>'
+      ).join('');
+    } else {
+      $('entity-facts').classList.add('hidden');
+      $('entity-facts').innerHTML = '';
+    }
+
+    const upgrade = node.type === 'card' ? (node.upgrade || {}) : {};
+    if (Object.keys(upgrade).length) {
+      $('upgrade-section').classList.remove('hidden');
+      const description = upgrade.description ? '<div class="upgrade-card">' + htmlEsc(upgrade.description) + '</div>' : '';
+      const deltas = Object.entries(upgrade)
+        .filter(([key]) => key !== 'description')
+        .map(([key, value]) =>
+          '<div class="upgrade-delta"><span class="upgrade-key">' + htmlEsc(key.replace(/_/g, ' ')) +
+          '</span><span class="upgrade-value">+' + htmlEsc(value) + '</span></div>'
+        ).join('');
+      $('upgrade-card').innerHTML = description + deltas;
+    } else {
+      $('upgrade-section').classList.add('hidden');
+      $('upgrade-card').innerHTML = '';
+    }
+
     const outgoing = (state.outAdj.get(id) || []).map(edge => ({
       edge,
       node: state.byId.get(edge.target)
@@ -1207,7 +1378,7 @@
       const manualLinks = await loadOptionalJson('./data/manual-links.json', []);
 
       state.nodes = normalizeData(raw);
-      state.edges = buildEdges(state.nodes, manualLinks);
+      state.edges = buildEdges(state.nodes, manualLinks, raw.cardPowers);
       buildAdjacency();
 
       initPixi();
