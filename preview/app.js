@@ -61,6 +61,7 @@
   const EFFECT_DEFS = [
     { id:'DRAW', name:'Draw', description:'Draw cards from the Draw Pile into the Hand.', patterns:[/\bdraw(?:s|n)?\b(?!\s+pile)/i], relation:'draws' },
     { id:'DISCARD', name:'Discard', description:'Move cards from the Hand to the Discard Pile.', patterns:[/\bdiscard(?:s|ed|ing)?\b(?!\s+pile)/i], relation:'discards' },
+    { id:'EXHAUST_CARD', name:'Exhaust Card', description:'Exhaust a card and move it to the Exhaust Pile.', patterns:[/\bexhaust(?:s|ed|ing)?\b(?!\s+pile)/i], relation:'exhausts cards' },
     { id:'PLAY_CARD', name:'Play Card', description:'Play cards from the Hand or by another effect.', patterns:[/\bplay(?:s|ed|ing)?\b/i], relation:'plays cards' },
     { id:'DAMAGE', name:'Damage', description:'Deal or take combat damage.', patterns:[/\bdeal(?:s)?\b[^.\n]*\bdamage\b/i,/\btake(?:s)?\b[^.\n]*\bdamage\b/i], relation:'deals / takes damage' },
     { id:'HEAL', name:'Heal', description:'Restore Hit Points.', patterns:[/\bheal(?:s|ed|ing)?\b/i], relation:'heals' },
@@ -334,7 +335,7 @@
     const clauseBefore = before.split(/[.\n]/).pop() || before;
     const clauseAfter = after.split(/[.\n]/)[0] || after;
 
-    if (/\b(?:whenever|when|each time|if|every\s+\d+\s+times)\b/.test(clauseBefore) &&
+    if (/\b(?:whenever|when|each time|first time|if|every\s+\d+\s+times)\b/.test(clauseBefore) &&
         /\b(?:play|apply|draw|discard|exhaust|gain|lose|create|deal)\b/.test(clauseBefore)) {
       return 'triggers on';
     }
@@ -345,7 +346,10 @@
     if (/\b(?:lose|loses|reduce|reduces)\b[^.\n]{0,34}$/.test(clauseBefore)) return 'reduces';
     if (/\b(?:apply|inflict)\b[^.\n]{0,30}$/.test(clauseBefore)) return 'applies';
     if (/\bequal to\b[^.\n]{0,24}$/.test(clauseBefore)) return 'scales with';
-    if (/\bgain\b[^.\n]{0,28}$/.test(clauseBefore)) return 'grants';
+    if (/\b(?:gain|give)\b[^.\n]{0,34}$/.test(clauseBefore)) return 'grants';
+    if (/\bfor each\b[^.\n]{0,46}$/.test(clauseBefore)) return 'scales with';
+    if (/\bdouble\b[^.\n]{0,30}$/.test(clauseBefore)) return 'modifies';
+    if (/\bif\b[^.\n]{0,52}$/.test(clauseBefore)) return 'requires';
     if (/\b(?:play|plays|played|playing)\b[^.\n]{0,26}$/.test(clauseBefore)) return 'plays';
     if (/\bdiscard(?:s|ed|ing)?\b[^.\n]{0,26}$/.test(clauseBefore)) return 'discards';
     if (/\bexhaust(?:s|ed|ing)?\b[^.\n]{0,26}$/.test(clauseBefore)) return 'exhausts';
@@ -386,6 +390,20 @@
       if (/\bfor each\b[^.\n]{0,42}\bdrawn\b/.test(t)) return 'scales with draw';
       if (/\b(?:cannot|may not)\s+draw\b|\bdraw\s+\d+\s+fewer\b/.test(t)) return 'modifies draw';
       return 'draws';
+    }
+
+    if (effectId === 'EXHAUST_CARD') {
+      if (/\b(?:whenever|when|each time|first time)\b[^.\n]{0,56}\bexhaust(?:s|ed|ing)?\b/.test(t)) return 'triggers on exhaust';
+      if (/\bfor each\b[^.\n]{0,48}\bexhausted\b/.test(t)) return 'scales with exhaust';
+      if (/\bif\b[^.\n]{0,48}\bexhausted\b/.test(t)) return 'requires exhaust';
+      return 'exhausts cards';
+    }
+
+    if (effectId === 'LOSE_HP') {
+      if (/\b(?:whenever|when|each time|first time)\b[^.\n]{0,56}\b(?:lose|lost)\b[^.\n]{0,24}\bhp\b/.test(t)) return 'triggers on HP loss';
+      if (/\bfor each\b[^.\n]{0,56}\b(?:lose|lost)\b[^.\n]{0,24}\bhp\b/.test(t)) return 'scales with HP loss';
+      if (/\bif\b[^.\n]{0,48}\b(?:lose|lost)\b[^.\n]{0,24}\bhp\b/.test(t)) return 'requires HP loss';
+      return 'loses HP';
     }
 
     if (effectId === 'PLAY_CARD') {
@@ -449,7 +467,10 @@
     }
 
     if (/\bexhaust\s+pile\b/i.test(text)) {
-      const relation = /\bplay\b[^.\n]{0,42}\bexhaust\s+pile\b/i.test(text) ? 'plays from' : 'references pile';
+      let relation = 'references pile';
+      if (/\bplay\b[^.\n]{0,42}\bexhaust\s+pile\b/i.test(text)) relation = 'plays from';
+      else if (/\bfor each\b[^.\n]{0,52}\bexhaust\s+pile\b/i.test(text)) relation = 'scales with pile size';
+      else if (/\bif\b[^.\n]{0,52}\bexhaust\s+pile\b/i.test(text)) relation = 'requires pile state';
       pushEdge(source.id, nodeId('mechanic','EXHAUST_PILE'), relation, 'derived');
     }
   }
@@ -472,6 +493,57 @@
     ['card:ENVENOM', 'effect:DAMAGE', ['triggers on damage']],
     ['card:STORM_OF_STEEL', 'effect:DISCARD', ['discards', 'scales with discard']],
     ['card:BURST', 'mechanic:REPLAY', ['grants']]
+  ];
+
+  const IRONCLAD_SEMANTIC_OVERRIDES = [
+    ['card:ASHEN_STRIKE', 'mechanic:EXHAUST_PILE', ['scales with pile size']],
+    ['card:BODY_SLAM', 'mechanic:BLOCK', ['scales with']],
+    ['card:BARRICADE', 'mechanic:BLOCK', ['retains']],
+    ['card:BULLY', 'power:VULNERABLE_POWER', ['scales with']],
+    ['card:DISMANTLE', 'power:VULNERABLE_POWER', ['requires']],
+    ['card:DOMINATE', 'power:VULNERABLE_POWER', ['applies', 'scales with']],
+    ['card:MOLTEN_FIST', 'power:VULNERABLE_POWER', ['modifies']],
+    ['card:COLOSSUS', 'power:VULNERABLE_POWER', ['requires']],
+    ['card:CRUELTY', 'power:VULNERABLE_POWER', ['modifies damage vs']],
+    ['card:VICIOUS', 'power:VULNERABLE_POWER', ['triggers on application']],
+    ['card:COLOSSUS', 'effect:DAMAGE', ['reduces incoming damage vs Vulnerable']],
+    ['card:CRUELTY', 'effect:DAMAGE', ['increases damage vs Vulnerable']],
+    ['card:BATTLE_TRANCE', 'effect:DRAW', ['draws', 'modifies draw']],
+    ['card:HELLRAISER', 'effect:DRAW', ['triggers on draw']],
+    ['card:HELLRAISER', 'effect:PLAY_CARD', ['plays drawn cards']],
+    ['card:JUGGERNAUT', 'mechanic:BLOCK', ['triggers on']],
+    ['card:UNMOVABLE', 'mechanic:BLOCK', ['modifies']],
+    ['card:FIGHT_ME', 'power:STRENGTH_POWER', ['grants to self & enemy']],
+    ['card:MANGLE', 'power:STRENGTH_POWER', ['reduces']],
+    ['card:RUPTURE', 'effect:LOSE_HP', ['triggers on HP loss']],
+    ['card:INFERNO', 'effect:LOSE_HP', ['loses HP', 'triggers on HP loss']],
+    ['card:SPITE', 'effect:LOSE_HP', ['requires HP loss']],
+    ['card:TEAR_ASUNDER', 'effect:LOSE_HP', ['scales with HP loss']],
+    ['card:DRUM_OF_BATTLE', 'effect:EXHAUST_CARD', ['triggers on exhaust']],
+    ['card:EVIL_EYE', 'effect:EXHAUST_CARD', ['requires exhaust']],
+    ['card:FEEL_NO_PAIN', 'effect:EXHAUST_CARD', ['triggers on exhaust']],
+    ['card:DARK_EMBRACE', 'effect:EXHAUST_CARD', ['triggers on exhaust']],
+    ['card:FORGOTTEN_RITUAL', 'effect:EXHAUST_CARD', ['requires exhaust']],
+    ['card:FIEND_FIRE', 'effect:EXHAUST_CARD', ['exhausts cards', 'scales with exhaust']],
+    ['card:SECOND_WIND', 'effect:EXHAUST_CARD', ['exhausts cards', 'scales with exhaust']],
+    ['card:STOKE', 'effect:EXHAUST_CARD', ['exhausts cards', 'scales with exhaust']],
+    ['card:CORRUPTION', 'effect:EXHAUST_CARD', ['triggers on card play', 'exhausts cards']],
+    ['card:HAVOC', 'mechanic:DRAW_PILE', ['plays from']],
+    ['card:HEADBUTT', 'mechanic:DISCARD_PILE', ['moves from']],
+    ['card:HEADBUTT', 'mechanic:DRAW_PILE', ['moves to']],
+    ['card:CASCADE', 'mechanic:DRAW_PILE', ['plays from']],
+    ['card:HOWL_FROM_BEYOND', 'mechanic:EXHAUST_PILE', ['plays from']],
+    ['card:PACTS_END', 'mechanic:EXHAUST_PILE', ['requires pile state']],
+    ['card:FEED', 'mechanic:HIT_POINTS', ['increases Max HP']],
+    ['relic:CHARONS_ASHES', 'effect:EXHAUST_CARD', ['triggers on exhaust']],
+    ['relic:DEMON_TONGUE', 'effect:LOSE_HP', ['triggers on HP loss']],
+    ['relic:SELF_FORMING_CLAY', 'effect:LOSE_HP', ['triggers on HP loss']],
+    ['relic:RED_SKULL', 'mechanic:HIT_POINTS', ['requires low HP']],
+    ['relic:RED_SKULL', 'power:STRENGTH_POWER', ['grants']],
+    ['relic:RUINED_HELMET', 'power:STRENGTH_POWER', ['modifies']],
+    ['relic:PAPER_PHROG', 'power:VULNERABLE_POWER', ['modifies']],
+    ['relic:PAPER_PHROG', 'effect:DAMAGE', ['increases damage vs Vulnerable']],
+    ['relic:BRIMSTONE', 'power:STRENGTH_POWER', ['grants to self & enemies']]
   ];
 
   function buildEdges(nodes, manualLinks, cardPowers) {
@@ -516,6 +588,10 @@
 
         if (slug(kw) === 'SLY') {
           pushEdge(card.id, nodeId('effect', 'DISCARD'), 'benefits from discard', 'explicit');
+        }
+
+        if (slug(kw) === 'EXHAUST') {
+          pushEdge(card.id, nodeId('effect', 'EXHAUST_CARD'), 'self-exhausts', 'explicit');
         }
       }
 
@@ -588,12 +664,15 @@
       if (energy && /\blose(?:s)?\b[^.\n]*(?:\[E\]|Energy)/i.test(text)) pushEdge(source.id, energy.id, 'consumes', 'derived');
       if (hp && /\bheal(?:s|ed|ing)?\b/i.test(text)) pushEdge(source.id, hp.id, 'restores', 'derived');
       if (hp && /\blose(?:s)?\b[^.\n]*\bHP\b/i.test(text)) pushEdge(source.id, hp.id, 'reduces', 'derived');
+      if (hp && /\b(?:raise|increase)\b[^.\n]{0,42}\bMax HP\b/i.test(text)) pushEdge(source.id, hp.id, 'increases Max HP', 'derived');
+      if (hp && /\bHP\b[^.\n]{0,24}\b(?:at or below|below|less than|under)\b[^.\n]{0,18}\b\d+%/i.test(text)) pushEdge(source.id, hp.id, 'requires low HP', 'derived');
     }
 
     const ontologyEdges = [
       ['effect:DRAW', 'mechanic:DRAW_PILE', 'draws from'],
       ['effect:DISCARD', 'mechanic:DISCARD_PILE', 'moves to'],
       ['keyword:EXHAUST', 'mechanic:EXHAUST_PILE', 'moves to'],
+      ['effect:EXHAUST_CARD', 'mechanic:EXHAUST_PILE', 'moves cards to'],
       ['keyword:SLY', 'effect:DISCARD', 'triggers when discarded'],
       ['effect:HEAL', 'mechanic:HIT_POINTS', 'restores'],
       ['effect:LOSE_HP', 'mechanic:HIT_POINTS', 'reduces'],
@@ -613,7 +692,7 @@
       }
     }
 
-    for (const [source, target, relations] of SILENT_SEMANTIC_OVERRIDES) {
+    for (const [source, target, relations] of [...SILENT_SEMANTIC_OVERRIDES, ...IRONCLAD_SEMANTIC_OVERRIDES]) {
       if (!byId.has(source) || !byId.has(target)) continue;
 
       for (let i = edges.length - 1; i >= 0; i -= 1) {
