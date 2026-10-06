@@ -272,38 +272,80 @@
     return nodes;
   }
 
-  function containsEntityName(text, name) {
-    const hay = norm(text);
-    const needle = norm(name);
-    if (!hay || !needle || needle.length < 4) return false;
+  function entityAliases(name) {
+    const base = norm(name).replace(/[{}]/g, '').trim();
+    if (!base) return [];
 
-    let from = 0;
-    while (from < hay.length) {
-      const at = hay.indexOf(needle, from);
-      if (at === -1) return false;
+    const aliases = new Set([base]);
 
-      const before = at === 0 ? '' : hay[at - 1];
-      const afterPos = at + needle.length;
-      const after = afterPos >= hay.length ? '' : hay[afterPos];
-      const word = /[a-z0-9]/;
+    if (!base.endsWith('s')) aliases.add(base + 's');
+    if (/[^aeiou]y$/.test(base)) aliases.add(base.slice(0, -1) + 'ies');
+    if (/(?:s|x|z|ch|sh)$/.test(base)) aliases.add(base + 'es');
 
-      if ((!before || !word.test(before)) && (!after || !word.test(after))) return true;
-      from = at + needle.length;
+    return [...aliases].sort((a, b) => b.length - a.length);
+  }
+
+  function findEntityMention(text, name) {
+    const hay = norm(text).replace(/[{}]/g, '');
+    if (!hay) return null;
+
+    for (const alias of entityAliases(name)) {
+      let from = 0;
+
+      while (from < hay.length) {
+        const at = hay.indexOf(alias, from);
+        if (at === -1) break;
+
+        const before = at === 0 ? '' : hay[at - 1];
+        const afterPos = at + alias.length;
+        const after = afterPos >= hay.length ? '' : hay[afterPos];
+        const word = /[a-z0-9]/;
+
+        if ((!before || !word.test(before)) && (!after || !word.test(after))) {
+          return { index: at, alias };
+        }
+
+        from = at + alias.length;
+      }
     }
 
-    return false;
+    return null;
+  }
+
+  function containsEntityName(text, name) {
+    return Boolean(findEntityMention(text, name));
   }
 
   function inferRelation(text, targetName) {
-    const t = norm(text);
-    const n = norm(targetName);
-    const index = t.indexOf(n);
-    const around = index >= 0 ? t.slice(Math.max(0, index - 58), index + n.length + 58) : t;
+    const t = norm(text).replace(/[{}]/g, '');
+    const mention = findEntityMention(text, targetName);
+    if (!mention) return 'references';
 
-    if (/add|create|put .* hand|shuffle|transform/.test(around)) return 'creates / moves';
-    if (/gain|apply|channel|inflict/.test(around)) return 'grants / applies';
-    if (/deal|damage|increase|additional/.test(around)) return 'modifies';
-    if (/whenever|when |if |start of|end of/.test(around)) return 'references / triggers';
+    const before = t.slice(Math.max(0, mention.index - 72), mention.index);
+    const after = t.slice(mention.index + mention.alias.length, mention.index + mention.alias.length + 72);
+    const clauseBefore = before.split(/[.\n]/).pop() || before;
+    const clauseAfter = after.split(/[.\n]/)[0] || after;
+
+    if (/\b(?:whenever|when|every|each time|if)\b/.test(clauseBefore) &&
+        /\b(?:play|apply|draw|discard|exhaust|gain|lose|create|deal)\b/.test(clauseBefore)) {
+      return 'triggers on';
+    }
+
+    if (/\b(?:add|create|shuffle|put)\b[^.\n]{0,42}$/.test(clauseBefore)) return 'creates';
+    if (/\btransform\b[^.\n]{0,34}$/.test(clauseBefore)) return 'transforms';
+    if (/\b(?:apply|inflict)\b[^.\n]{0,30}$/.test(clauseBefore)) return 'applies';
+    if (/\bgain\b[^.\n]{0,28}$/.test(clauseBefore)) return 'grants';
+    if (/\b(?:play|plays|played|playing)\b[^.\n]{0,26}$/.test(clauseBefore)) return 'plays';
+    if (/\bdiscard(?:s|ed|ing)?\b[^.\n]{0,26}$/.test(clauseBefore)) return 'discards';
+    if (/\bexhaust(?:s|ed|ing)?\b[^.\n]{0,26}$/.test(clauseBefore)) return 'exhausts';
+    if (/\b(?:has|have|with|requires?)\b[^.\n]{0,22}$/.test(clauseBefore)) return 'requires';
+
+    if (/^\s*(?:is\s+)?triggered\b/.test(clauseAfter)) return 'triggers';
+    if (/^\s*(?:now\s+)?(?:deal|deals|gain|gains|take|takes|cost|costs|hit|hits|reduce|reduces|increase|increases)\b/.test(clauseAfter)) {
+      return 'modifies';
+    }
+
+    if (/\b(?:additional|double|more|less|increase|reduce|damage)\b/.test(clauseAfter)) return 'modifies';
     return 'references';
   }
 
@@ -369,7 +411,11 @@
       for (const target of candidates) {
         if (target.id === source.id) continue;
         if (containsEntityName(text, target.name)) {
-          pushEdge(source.id, target.id, inferRelation(text, target.name), 'description');
+          const relation = inferRelation(text, target.name);
+          const provenance = ['creates','transforms','applies','grants','plays','discards','exhausts','requires','triggers','triggers on','modifies'].includes(relation)
+            ? 'derived'
+            : 'description';
+          pushEdge(source.id, target.id, relation, provenance);
         }
       }
 
