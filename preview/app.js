@@ -407,6 +407,10 @@
       for (const kw of card.keywords || []) {
         const target = nodeId('keyword', slug(kw));
         if (byId.has(target)) pushEdge(card.id, target, 'has keyword', 'explicit');
+
+        if (slug(kw) === 'SLY') {
+          pushEdge(card.id, nodeId('effect', 'DISCARD'), 'benefits from discard', 'explicit');
+        }
       }
 
       for (const tag of card.tags || []) {
@@ -472,6 +476,7 @@
       ['effect:DRAW', 'mechanic:DRAW_PILE', 'draws from'],
       ['effect:DISCARD', 'mechanic:DISCARD_PILE', 'moves to'],
       ['keyword:EXHAUST', 'mechanic:EXHAUST_PILE', 'moves to'],
+      ['keyword:SLY', 'effect:DISCARD', 'triggers when discarded'],
       ['effect:HEAL', 'mechanic:HIT_POINTS', 'restores'],
       ['effect:LOSE_HP', 'mechanic:HIT_POINTS', 'reduces'],
       ['effect:COST_CHANGE', 'mechanic:ENERGY', 'modifies cost']
