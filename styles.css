@@ -83,25 +83,40 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
 .primary-button{background:#2b2839;border-color:#453f63;color:#c7c0f8}
 .primary-button:hover,.ghost-button:hover,.icon-button:hover{background:#303030}
 .ghost-button:disabled{opacity:.4;cursor:not-allowed}
+.full-button{width:100%;margin-top:8px}
 .legend{margin-top:18px;padding-top:13px;border-top:1px solid var(--line-soft)}
 .legend-row{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:#a5a5a5;margin:6px 0}
 .legend-left{display:flex;align-items:center;gap:7px}
 .legend-dot{width:7px;height:7px;border-radius:50%}
 .source-note{display:flex;justify-content:space-between;gap:10px;margin-top:15px;padding-top:12px;border-top:1px solid var(--line-soft);font-size:10px;color:#717171}
 
+.physics-section{
+  padding:11px 10px 10px;
+  border:1px solid #373342;
+  border-radius:8px;
+  background:linear-gradient(180deg,rgba(127,109,242,.065),rgba(127,109,242,.02));
+}
+.range-row{display:grid!important;grid-template-columns:86px 1fr;align-items:center;gap:8px;margin:8px 0!important;text-transform:none!important;letter-spacing:0!important;font-size:10.5px!important;font-weight:500!important;color:#aaa!important}
+.range-row input[type="range"]{width:100%;accent-color:var(--accent);cursor:pointer}
+.physics-toggle{margin-top:9px}
+
 .graph-stage{
   grid-area:graph;position:relative;min-width:0;overflow:hidden;
-  background:
-    radial-gradient(circle at 50% 50%,rgba(127,109,242,.045),transparent 36%),
-    #1e1e1e
+  background:radial-gradient(circle at 50% 50%,rgba(127,109,242,.05),transparent 38%),#1e1e1e;
+  touch-action:none
 }
-#cy{position:absolute;inset:0}
+#graph-canvas{position:absolute;inset:0;overflow:hidden}
+#graph-canvas canvas{display:block;width:100%!important;height:100%!important;cursor:grab}
+#graph-canvas canvas:active{cursor:grabbing}
 .graph-toolbar{position:absolute;right:12px;top:12px;display:flex;gap:5px;z-index:4}
 .icon-button{width:29px;height:29px;display:grid;place-items:center;font-size:15px}
-.graph-summary,.selection-hint{
-  position:absolute;left:12px;bottom:11px;border:1px solid var(--line);background:rgba(30,30,30,.9);
-  backdrop-filter:blur(8px);border-radius:6px;padding:5px 8px;color:#888;font-size:10px;z-index:4
+.graph-summary,.selection-hint,.physics-badge{
+  position:absolute;border:1px solid var(--line);background:rgba(30,30,30,.9);backdrop-filter:blur(8px);
+  border-radius:6px;padding:5px 8px;font-size:10px;z-index:4
 }
+.graph-summary{left:12px;bottom:11px;color:#888}
+.physics-badge{right:12px;bottom:11px;color:#9589df;border-color:#443d65}
+.physics-badge.active{color:#b9afff;border-color:#6256a5;box-shadow:0 0 16px rgba(127,109,242,.12)}
 .selection-hint{left:50%;bottom:12px;transform:translateX(-50%);color:#b0a7e8;border-color:#494263;background:rgba(37,34,49,.92)}
 .loading-state{position:absolute;inset:0;display:grid;place-content:center;text-align:center;gap:6px;background:#1e1e1e;z-index:9}
 .loading-state span{color:#777;font-size:10.5px;max-width:340px}
@@ -131,7 +146,7 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
 .relation-dot{width:6px;height:6px;border-radius:50%;margin-top:5px}
 .relation-name{font-size:11px;color:#c9c9c9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .relation-type{font-size:9px;color:#727272;margin-top:1px}
-.relation-provenance{color:#625a9c}
+.relation-provenance{color:#7267b8}
 .empty-links{font-size:10px;color:#696969;padding:7px 2px}
 
 .palette-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.52);display:grid;place-items:start center;padding-top:11vh;z-index:100}
