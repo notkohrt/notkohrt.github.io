@@ -106,7 +106,7 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
   touch-action:none
 }
 #graph-canvas{position:absolute;inset:0;overflow:hidden}
-#graph-canvas canvas{display:block;width:100%!important;height:100%!important;cursor:grab}
+#graph-canvas canvas{display:block;width:100%!important;height:100%!important;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #graph-canvas canvas:active{cursor:grabbing}
 .graph-toolbar{position:absolute;right:12px;top:12px;display:flex;gap:5px;z-index:4}
 .icon-button{width:29px;height:29px;display:grid;place-items:center;font-size:15px}
