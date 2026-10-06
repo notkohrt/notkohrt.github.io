@@ -333,22 +333,20 @@ function inferKeywordRelation(text, keywordName) {
 
 function addPileRelations(source, text, push) {
   if (/\bdraw\s+pile\b/i.test(text)) {
-    const relation = /(?:no cards|empty)[^.\n]{0,28}\bdraw\s+pile\b|\bdraw\s+pile\b[^.\n]{0,28}(?:empty|no cards)/i.test(text)
-      ? 'requires empty'
-      : 'references pile';
-    push(source.id, nodeId('mechanic','DRAW_PILE'), relation, 'derived');
+    if (/(?:no cards|empty)[^.\n]{0,28}\bdraw\s+pile\b|\bdraw\s+pile\b[^.\n]{0,28}(?:empty|no cards)/i.test(text)) {
+      push(source.id, nodeId('mechanic','DRAW_PILE'), 'requires empty', 'derived');
+    }
   }
 
-  if (/\bdiscard\s+pile\b/i.test(text)) {
-    push(source.id, nodeId('mechanic','DISCARD_PILE'), 'references pile', 'derived');
-  }
+  // Discard Pile mentions are ignored here unless a specific move/play
+  // relationship is supplied by a high-confidence parser or curated override.
 
   if (/\bexhaust\s+pile\b/i.test(text)) {
-    let relation = 'references pile';
+    let relation = null;
     if (/\bplay\b[^.\n]{0,42}\bexhaust\s+pile\b/i.test(text)) relation = 'plays from';
     else if (/\bfor each\b[^.\n]{0,52}\bexhaust\s+pile\b/i.test(text)) relation = 'scales with pile size';
     else if (/\bif\b[^.\n]{0,52}\bexhaust\s+pile\b/i.test(text)) relation = 'requires pile state';
-    push(source.id, nodeId('mechanic','EXHAUST_PILE'), relation, 'derived');
+    if (relation) push(source.id, nodeId('mechanic','EXHAUST_PILE'), relation, 'derived');
   }
 }
 
@@ -429,7 +427,21 @@ function buildDetectedEdges(nodes, cardPowers) {
   const powers = nodes.filter(n => n.type === 'power');
 
   const candidateGroups = new Map();
-  for (const candidate of nodes.filter(n => !['keyword','effect'].includes(n.type) && n.name && n.name.length >= 4)) {
+  const dedicatedMechanics = new Set([
+    'mechanic:BLOCK',
+    'mechanic:ENERGY',
+    'mechanic:HIT_POINTS',
+    'mechanic:DRAW_PILE',
+    'mechanic:DISCARD_PILE',
+    'mechanic:EXHAUST_PILE'
+  ]);
+
+  for (const candidate of nodes.filter(n =>
+    !['keyword','effect'].includes(n.type) &&
+    !dedicatedMechanics.has(n.id) &&
+    n.name &&
+    n.name.length >= 4
+  )) {
     const key = norm(candidate.name);
     if (!candidateGroups.has(key)) candidateGroups.set(key, []);
     candidateGroups.get(key).push(candidate);
@@ -482,10 +494,8 @@ function buildDetectedEdges(nodes, cardPowers) {
       if (target.id === source.id) continue;
       if (containsEntityName(source.description, target.name)) {
         for (const relation of inferRelations(source.description, target.name)) {
-          const provenance = ['creates','transforms','removes','reduces','applies','scales with','grants','plays','discards','exhausts','requires','triggers','triggers on','modifies'].includes(relation)
-            ? 'derived'
-            : 'description';
-          push(source.id, target.id, relation, provenance);
+          if (relation === 'references') continue;
+          push(source.id, target.id, relation, 'derived');
         }
       }
     }
@@ -493,13 +503,8 @@ function buildDetectedEdges(nodes, cardPowers) {
     for (const keyword of keywords) {
       if (containsEntityName(source.description, keyword.name)) {
         const relation = inferKeywordRelation(source.description, keyword.name);
-        if (relation) {
-          push(
-            source.id,
-            keyword.id,
-            relation,
-            relation === 'uses keyword' ? 'description' : 'derived'
-          );
+        if (relation && relation !== 'uses keyword') {
+          push(source.id, keyword.id, relation, 'derived');
         }
       }
     }
