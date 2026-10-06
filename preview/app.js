@@ -90,6 +90,7 @@
     panning: false,
     panStart: null,
     worldStart: null,
+    panMoved: false,
 
     touchPointers: new Map(),
     pinchStart: null,
@@ -410,10 +411,10 @@
     state.pixi.stage.on('pointerupoutside', onStagePointerUp);
 
     state.pixi.view.addEventListener('wheel', onWheel, { passive: false });
-    state.pixi.view.addEventListener('pointerdown', onCanvasPointerDown, { passive: false });
-    state.pixi.view.addEventListener('pointermove', onCanvasPointerMove, { passive: false });
-    state.pixi.view.addEventListener('pointerup', onCanvasPointerUp, { passive: false });
-    state.pixi.view.addEventListener('pointercancel', onCanvasPointerUp, { passive: false });
+    state.pixi.view.addEventListener('touchstart', onTouchStart, { passive: false });
+    state.pixi.view.addEventListener('touchmove', onTouchMove, { passive: false });
+    state.pixi.view.addEventListener('touchend', onTouchEnd, { passive: false });
+    state.pixi.view.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
     new ResizeObserver(() => {
       state.pixi.stage.hitArea = state.pixi.screen;
@@ -704,6 +705,7 @@
     if (state.touchPointers.size >= 2) return;
     if (state.draggingNode) return;
     state.panning = true;
+    state.panMoved = false;
     state.panStart = { x: e.global.x, y: e.global.y };
     state.worldStart = { x: state.world.position.x, y: state.world.position.y };
   }
@@ -719,14 +721,21 @@
     }
 
     if (state.panning && state.panStart && state.worldStart) {
+      const dx = e.global.x - state.panStart.x;
+      const dy = e.global.y - state.panStart.y;
+      if (Math.hypot(dx, dy) > 5) state.panMoved = true;
+
       state.world.position.set(
-        state.worldStart.x + (e.global.x - state.panStart.x),
-        state.worldStart.y + (e.global.y - state.panStart.y)
+        state.worldStart.x + dx,
+        state.worldStart.y + dy
       );
     }
   }
 
   function onStagePointerUp() {
+    const wasDraggingNode = Boolean(state.draggingNode);
+    const wasBackgroundTap = state.panning && !state.panMoved && !wasDraggingNode;
+
     if (state.draggingNode) {
       if (!$('pin-dragged').checked) {
         state.draggingNode.fx = null;
@@ -741,83 +750,75 @@
     }
 
     state.panning = false;
+    state.panMoved = false;
     state.panStart = null;
     state.worldStart = null;
-  }
 
-  function onCanvasPointerDown(e) {
-    if (e.pointerType !== 'touch') return;
-    state.touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-    if (state.touchPointers.size === 2) {
-      e.preventDefault();
-      state.panning = false;
-
-      if (state.draggingNode) {
-        if (!$('pin-dragged').checked) {
-          state.draggingNode.fx = null;
-          state.draggingNode.fy = null;
-        }
-        state.draggingNode = null;
-        if (state.simulation) state.simulation.alphaTarget(0);
-      }
-
-      const points = [...state.touchPointers.values()];
-      const dx = points[1].x - points[0].x;
-      const dy = points[1].y - points[0].y;
-      const midpoint = {
-        x: (points[0].x + points[1].x) / 2,
-        y: (points[0].y + points[1].y) / 2
-      };
-
-      const rect = state.pixi.view.getBoundingClientRect();
-      const localMid = { x: midpoint.x - rect.left, y: midpoint.y - rect.top };
-      const scale = state.world.scale.x;
-
-      state.pinchStart = {
-        distance: Math.max(1, Math.hypot(dx, dy)),
-        scale,
-        worldX: (localMid.x - state.world.position.x) / scale,
-        worldY: (localMid.y - state.world.position.y) / scale
-      };
+    if (wasBackgroundTap && state.focusedId) {
+      clearFocus();
     }
   }
 
-  function onCanvasPointerMove(e) {
-    if (e.pointerType !== 'touch' || !state.touchPointers.has(e.pointerId)) return;
-    state.touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-    if (state.touchPointers.size !== 2 || !state.pinchStart) return;
+  function onTouchStart(e) {
+    if (e.touches.length < 2) return;
     e.preventDefault();
 
-    const points = [...state.touchPointers.values()];
-    const dx = points[1].x - points[0].x;
-    const dy = points[1].y - points[0].y;
-    const distance = Math.max(1, Math.hypot(dx, dy));
-    const midpoint = {
-      x: (points[0].x + points[1].x) / 2,
-      y: (points[0].y + points[1].y) / 2
-    };
+    state.panning = false;
+    state.panMoved = false;
 
+    if (state.draggingNode) {
+      if (!$('pin-dragged').checked) {
+        state.draggingNode.fx = null;
+        state.draggingNode.fy = null;
+      }
+      state.draggingNode = null;
+      if (state.simulation) state.simulation.alphaTarget(0);
+    }
+
+    const a = e.touches[0];
+    const b = e.touches[1];
     const rect = state.pixi.view.getBoundingClientRect();
-    const localMid = { x: midpoint.x - rect.left, y: midpoint.y - rect.top };
+    const midpoint = {
+      x: (a.clientX + b.clientX) / 2 - rect.left,
+      y: (a.clientY + b.clientY) / 2 - rect.top
+    };
+    const scale = state.world.scale.x;
+
+    state.pinchStart = {
+      distance: Math.max(1, Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY)),
+      scale,
+      worldX: (midpoint.x - state.world.position.x) / scale,
+      worldY: (midpoint.y - state.world.position.y) / scale
+    };
+  }
+
+  function onTouchMove(e) {
+    if (e.touches.length < 2 || !state.pinchStart) return;
+    e.preventDefault();
+
+    const a = e.touches[0];
+    const b = e.touches[1];
+    const rect = state.pixi.view.getBoundingClientRect();
+    const midpoint = {
+      x: (a.clientX + b.clientX) / 2 - rect.left,
+      y: (a.clientY + b.clientY) / 2 - rect.top
+    };
+    const distance = Math.max(1, Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY));
     const newScale = Math.max(0.12, Math.min(3.2,
       state.pinchStart.scale * (distance / state.pinchStart.distance)
     ));
 
     state.world.scale.set(newScale);
     state.world.position.set(
-      localMid.x - state.pinchStart.worldX * newScale,
-      localMid.y - state.pinchStart.worldY * newScale
+      midpoint.x - state.pinchStart.worldX * newScale,
+      midpoint.y - state.pinchStart.worldY * newScale
     );
   }
 
-  function onCanvasPointerUp(e) {
-    if (e.pointerType !== 'touch') return;
-    state.touchPointers.delete(e.pointerId);
-
-    if (state.touchPointers.size < 2) {
+  function onTouchEnd(e) {
+    if (e.touches.length < 2) {
       state.pinchStart = null;
+      state.touchPointers.clear();
     }
   }
 
@@ -1158,6 +1159,7 @@
   function clearFocus() {
     state.focusedId = null;
     $('clear-focus').disabled = true;
+    $('inspector-panel').classList.remove('open');
 
     $('entity-card').classList.add('hidden');
     $('inspector-empty').classList.remove('hidden');
