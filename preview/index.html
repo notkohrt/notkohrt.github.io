@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0c0d10">
+
+  <title>STS2 Bubble — Slay the Spire 2 Interaction Graph</title>
+  <meta name="description" content="Explore cards, relics, powers, potions, enchantments, keywords, and their mechanical connections in Slay the Spire 2.">
+
+  <link rel="canonical" href="https://notkohrt.pro/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="STS2 Bubble">
+  <meta property="og:description" content="An interactive Slay the Spire 2 knowledge graph.">
+  <meta property="og:image" content="https://notkohrt.pro/docs/assets/sts2-neow.webp">
+  <meta property="og:url" content="https://notkohrt.pro/">
+  <meta property="og:site_name" content="STS2 Bubble">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="STS2 Bubble">
+  <meta name="twitter:description" content="An interactive Slay the Spire 2 knowledge graph.">
+  <meta name="twitter:image" content="https://notkohrt.pro/docs/assets/sts2-neow.webp">
+
+  <link rel="stylesheet" href="./styles.css">
+</head>
+
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">S2</div>
+        <div>
+          <div class="brand-title">STS2 Bubble</div>
+          <div class="brand-subtitle">mechanical knowledge graph</div>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="ghost-button mobile-only" id="filters-toggle" type="button">Filters</button>
+        <div class="dataset-status" id="dataset-status" aria-live="polite">
+          <span class="status-dot"></span>
+          <span>Loading data…</span>
+        </div>
+        <button class="ghost-button mobile-only" id="inspector-toggle" type="button">Details</button>
+      </div>
+    </header>
+
+    <aside class="panel filters-panel" id="filters-panel">
+      <div class="panel-header">
+        <div>
+          <h1>Explore</h1>
+          <p>Filter the graph, then click any node to inspect its neighborhood.</p>
+        </div>
+        <button class="icon-button mobile-only" id="filters-close" type="button" aria-label="Close filters">×</button>
+      </div>
+
+      <label class="search-wrap" for="search-input">
+        <span>Search</span>
+        <input id="search-input" type="search" autocomplete="off" placeholder="Card, relic, mechanic…">
+        <kbd>/</kbd>
+      </label>
+
+      <section class="filter-section">
+        <div class="filter-heading">Entity type</div>
+        <div class="check-grid" id="type-filters"></div>
+      </section>
+
+      <section class="filter-section">
+        <label for="color-filter">Character / color</label>
+        <select id="color-filter">
+          <option value="all">All colors</option>
+        </select>
+      </section>
+
+      <section class="filter-section">
+        <label for="rarity-filter">Rarity / tier</label>
+        <select id="rarity-filter">
+          <option value="all">All rarities</option>
+        </select>
+      </section>
+
+      <section class="filter-section">
+        <label for="card-type-filter">Card type</label>
+        <select id="card-type-filter">
+          <option value="all">All card types</option>
+        </select>
+      </section>
+
+      <section class="filter-section">
+        <label for="cost-filter">Card cost</label>
+        <select id="cost-filter">
+          <option value="all">All costs</option>
+        </select>
+      </section>
+
+      <section class="filter-section compact-toggle">
+        <label class="toggle-row">
+          <input id="isolated-filter" type="checkbox" checked>
+          <span>Hide isolated nodes</span>
+        </label>
+      </section>
+
+      <div class="filter-actions">
+        <button class="primary-button" id="reset-filters" type="button">Reset filters</button>
+        <button class="ghost-button" id="clear-focus" type="button" disabled>Clear focus</button>
+      </div>
+
+      <div class="legend">
+        <div class="filter-heading">Graph key</div>
+        <div id="legend-items"></div>
+      </div>
+
+      <div class="source-note">
+        <span>Data source</span>
+        <a href="https://github.com/nkhoit/spire-archive" target="_blank" rel="noreferrer">Spire Archive ↗</a>
+      </div>
+    </aside>
+
+    <main class="graph-stage" id="graph-stage">
+      <div id="cy" aria-label="Interactive Slay the Spire 2 relationship graph"></div>
+
+      <div class="graph-toolbar">
+        <button class="icon-button" id="fit-graph" type="button" title="Fit graph" aria-label="Fit graph">◎</button>
+        <button class="icon-button" id="zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+        <button class="icon-button" id="zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+      </div>
+
+      <div class="graph-summary" id="graph-summary">Preparing graph…</div>
+
+      <div class="loading-state" id="loading-state">
+        <div class="loader"></div>
+        <strong>Building the Spire graph</strong>
+        <span>Loading cards, relics, powers, potions, enchantments, and keywords.</span>
+      </div>
+    </main>
+
+    <aside class="panel inspector-panel" id="inspector-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Inspector</h2>
+          <p id="inspector-hint">Select a node to see what it connects to.</p>
+        </div>
+        <button class="icon-button mobile-only" id="inspector-close" type="button" aria-label="Close inspector">×</button>
+      </div>
+
+      <div class="inspector-empty" id="inspector-empty">
+        <div class="empty-orbit" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <strong>Pick a node</strong>
+        <p>The graph will collapse around it so the actual mechanical relationships are easier to read.</p>
+      </div>
+
+      <article class="entity-card hidden" id="entity-card">
+        <div class="entity-kicker" id="entity-kicker"></div>
+        <h2 id="entity-name"></h2>
+        <div class="entity-meta" id="entity-meta"></div>
+        <div class="entity-description" id="entity-description"></div>
+
+        <div class="relations-header">
+          <h3>Connections</h3>
+          <span id="relations-count"></span>
+        </div>
+        <div class="relations-list" id="relations-list"></div>
+      </article>
+    </aside>
+
+    <footer class="footer">
+      <span>Unofficial fan project. Slay the Spire and related game content belong to Mega Crit.</span>
+      <span id="data-count"></span>
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js" defer></script>
+  <script src="https://spire-codex.com/widget/spire-codex-tooltip.js" defer></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>
