@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0c0d10">
+  <meta name="theme-color" content="#1e1e1e">
 
   <title>STS2 Bubble — Slay the Spire 2 Interaction Graph</title>
   <meta name="description" content="Explore cards, relics, powers, potions, enchantments, keywords, and their mechanical connections in Slay the Spire 2.">
@@ -24,7 +24,6 @@
 
   <link rel="stylesheet" href="./styles.css">
 </head>
-
 <body>
   <div class="app-shell">
     <header class="topbar">
@@ -32,32 +31,49 @@
         <div class="brand-mark" aria-hidden="true">S2</div>
         <div>
           <div class="brand-title">STS2 Bubble</div>
-          <div class="brand-subtitle">mechanical knowledge graph</div>
+          <div class="brand-subtitle">vault graph</div>
+        </div>
+      </div>
+
+      <div class="view-controls" aria-label="Graph view controls">
+        <div class="segmented">
+          <button class="segment active" id="global-mode" type="button">Global</button>
+          <button class="segment" id="local-mode" type="button">Local</button>
+        </div>
+        <div class="depth-controls" id="depth-controls" aria-label="Local graph depth">
+          <span>Depth</span>
+          <button class="depth-button active" data-depth="1" type="button">1</button>
+          <button class="depth-button" data-depth="2" type="button">2</button>
+          <button class="depth-button" data-depth="3" type="button">3</button>
         </div>
       </div>
 
       <div class="topbar-actions">
         <button class="ghost-button mobile-only" id="filters-toggle" type="button">Filters</button>
+        <button class="command-button" id="command-button" type="button">
+          <span>Quick switcher</span>
+          <kbd>Ctrl K</kbd>
+        </button>
         <div class="dataset-status" id="dataset-status" aria-live="polite">
           <span class="status-dot"></span>
-          <span>Loading data…</span>
+          <span>Loading…</span>
         </div>
-        <button class="ghost-button mobile-only" id="inspector-toggle" type="button">Details</button>
+        <button class="ghost-button mobile-only" id="inspector-toggle" type="button">Note</button>
       </div>
     </header>
 
     <aside class="panel filters-panel" id="filters-panel">
       <div class="panel-header">
         <div>
-          <h1>Explore</h1>
-          <p>Filter the graph, then click any node to inspect its neighborhood.</p>
+          <h1>Graph controls</h1>
+          <p>Like Obsidian: filter globally, then inspect a local neighborhood.</p>
         </div>
         <button class="icon-button mobile-only" id="filters-close" type="button" aria-label="Close filters">×</button>
       </div>
 
       <label class="search-wrap" for="search-input">
-        <span>Search</span>
-        <input id="search-input" type="search" autocomplete="off" placeholder="Card, relic, mechanic…">
+        <span>Filter graph</span>
+        <input id="search-input" type="search" autocomplete="off" placeholder="Name, text, mechanic…">
         <kbd>/</kbd>
       </label>
 
@@ -68,51 +84,46 @@
 
       <section class="filter-section">
         <label for="color-filter">Character / color</label>
-        <select id="color-filter">
-          <option value="all">All colors</option>
-        </select>
+        <select id="color-filter"><option value="all">All colors</option></select>
       </section>
 
       <section class="filter-section">
         <label for="rarity-filter">Rarity / tier</label>
-        <select id="rarity-filter">
-          <option value="all">All rarities</option>
-        </select>
+        <select id="rarity-filter"><option value="all">All rarities</option></select>
       </section>
 
       <section class="filter-section">
         <label for="card-type-filter">Card type</label>
-        <select id="card-type-filter">
-          <option value="all">All card types</option>
-        </select>
+        <select id="card-type-filter"><option value="all">All card types</option></select>
       </section>
 
       <section class="filter-section">
         <label for="cost-filter">Card cost</label>
-        <select id="cost-filter">
-          <option value="all">All costs</option>
-        </select>
+        <select id="cost-filter"><option value="all">All costs</option></select>
       </section>
 
-      <section class="filter-section compact-toggle">
-        <label class="toggle-row">
-          <input id="isolated-filter" type="checkbox" checked>
-          <span>Hide isolated nodes</span>
-        </label>
+      <section class="filter-section">
+        <div class="filter-heading">Local graph direction</div>
+        <label class="toggle-row"><input id="incoming-filter" type="checkbox" checked><span>Incoming links</span></label>
+        <label class="toggle-row"><input id="outgoing-filter" type="checkbox" checked><span>Outgoing links</span></label>
+      </section>
+
+      <section class="filter-section">
+        <label class="toggle-row"><input id="isolated-filter" type="checkbox" checked><span>Hide isolated nodes</span></label>
       </section>
 
       <div class="filter-actions">
-        <button class="primary-button" id="reset-filters" type="button">Reset filters</button>
-        <button class="ghost-button" id="clear-focus" type="button" disabled>Clear focus</button>
+        <button class="primary-button" id="reset-filters" type="button">Reset</button>
+        <button class="ghost-button" id="clear-focus" type="button" disabled>Clear selection</button>
       </div>
 
       <div class="legend">
-        <div class="filter-heading">Graph key</div>
+        <div class="filter-heading">Node groups</div>
         <div id="legend-items"></div>
       </div>
 
       <div class="source-note">
-        <span>Data source</span>
+        <span>Data</span>
         <a href="https://github.com/nkhoit/spire-archive" target="_blank" rel="noreferrer">Spire Archive ↗</a>
       </div>
     </aside>
@@ -127,29 +138,28 @@
       </div>
 
       <div class="graph-summary" id="graph-summary">Preparing graph…</div>
+      <div class="selection-hint hidden" id="selection-hint">Select a node for its local graph.</div>
 
       <div class="loading-state" id="loading-state">
         <div class="loader"></div>
-        <strong>Building the Spire graph</strong>
-        <span>Loading cards, relics, powers, potions, enchantments, and keywords.</span>
+        <strong>Building the vault graph</strong>
+        <span>Loading STS2 entities and resolving links.</span>
       </div>
     </main>
 
     <aside class="panel inspector-panel" id="inspector-panel">
-      <div class="panel-header">
+      <div class="panel-header note-header">
         <div>
-          <h2>Inspector</h2>
-          <p id="inspector-hint">Select a node to see what it connects to.</p>
+          <div class="note-path" id="note-path">No note selected</div>
+          <h2 id="note-panel-title">Reading view</h2>
         </div>
-        <button class="icon-button mobile-only" id="inspector-close" type="button" aria-label="Close inspector">×</button>
+        <button class="icon-button mobile-only" id="inspector-close" type="button" aria-label="Close note">×</button>
       </div>
 
       <div class="inspector-empty" id="inspector-empty">
-        <div class="empty-orbit" aria-hidden="true">
-          <span></span><span></span><span></span>
-        </div>
-        <strong>Pick a node</strong>
-        <p>The graph will collapse around it so the actual mechanical relationships are easier to read.</p>
+        <div class="empty-orbit" aria-hidden="true"><span></span><span></span><span></span></div>
+        <strong>Open a note</strong>
+        <p>Click a graph node or use the quick switcher. Incoming links become backlinks, just like an Obsidian vault.</p>
       </div>
 
       <article class="entity-card hidden" id="entity-card">
@@ -158,18 +168,34 @@
         <div class="entity-meta" id="entity-meta"></div>
         <div class="entity-description" id="entity-description"></div>
 
-        <div class="relations-header">
-          <h3>Connections</h3>
-          <span id="relations-count"></span>
-        </div>
-        <div class="relations-list" id="relations-list"></div>
+        <section class="link-section">
+          <div class="relations-header"><h3>Outgoing links</h3><span id="outgoing-count"></span></div>
+          <div class="relations-list" id="outgoing-list"></div>
+        </section>
+
+        <section class="link-section">
+          <div class="relations-header"><h3>Backlinks</h3><span id="backlinks-count"></span></div>
+          <div class="relations-list" id="backlinks-list"></div>
+        </section>
       </article>
     </aside>
 
     <footer class="footer">
-      <span>Unofficial fan project. Slay the Spire and related game content belong to Mega Crit.</span>
+      <span>Unofficial fan project. Slay the Spire and related content belong to Mega Crit.</span>
       <span id="data-count"></span>
     </footer>
+  </div>
+
+  <div class="palette-backdrop hidden" id="palette-backdrop" role="presentation">
+    <div class="command-palette" role="dialog" aria-modal="true" aria-label="Quick switcher">
+      <div class="palette-input-wrap">
+        <span>⌕</span>
+        <input id="palette-input" type="search" autocomplete="off" placeholder="Open a card, relic, power…">
+        <kbd>Esc</kbd>
+      </div>
+      <div class="palette-results" id="palette-results"></div>
+      <div class="palette-footer">Enter to open · ↑↓ to navigate</div>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js" defer></script>
