@@ -9,15 +9,24 @@
   };
 
   const TYPE_COLORS = {
-    card: '#7e8fb8',
-    relic: '#c79b57',
-    power: '#a07cb8',
+    card: '#8b83d6',
+    relic: '#c19a63',
+    power: '#a276bd',
     potion: '#65a7a1',
-    enchantment: '#d08aa7',
-    keyword: '#8b9a78'
+    enchantment: '#c9829f',
+    keyword: '#7f9a72'
   };
 
   const TYPE_LABELS = {
+    card: 'Cards',
+    relic: 'Relics',
+    power: 'Powers',
+    potion: 'Potions',
+    enchantment: 'Enchantments',
+    keyword: 'Keywords'
+  };
+
+  const TYPE_FOLDERS = {
     card: 'Cards',
     relic: 'Relics',
     power: 'Powers',
@@ -31,18 +40,38 @@
     edges: [],
     cy: null,
     focusedId: null,
-    visibleTypes: new Set(Object.keys(TYPE_LABELS))
+    viewMode: 'global',
+    depth: 1,
+    visibleTypes: new Set(Object.keys(TYPE_LABELS)),
+    outAdj: new Map(),
+    inAdj: new Map(),
+    paletteIndex: 0,
+    paletteMatches: [],
+    layoutTimer: null
   };
 
   const $ = id => document.getElementById(id);
   const norm = s => String(s == null ? '' : s).toLowerCase().trim();
   const slug = s => String(s == null ? '' : s).replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').toUpperCase();
   const nodeId = (type, id) => type + ':' + id;
+  const htmlEsc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 
   async function loadJson(url) {
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to load ' + url);
     return res.json();
+  }
+
+  async function loadOptionalJson(url, fallback) {
+    try {
+      return await loadJson(url);
+    } catch (_) {
+      return fallback;
+    }
   }
 
   function normalizeData(raw) {
@@ -128,8 +157,8 @@
     const hay = norm(text);
     const needle = norm(name);
     if (!hay || !needle || needle.length < 4) return false;
-    let from = 0;
 
+    let from = 0;
     while (from < hay.length) {
       const at = hay.indexOf(needle, from);
       if (at === -1) return false;
@@ -138,10 +167,8 @@
       const afterPos = at + needle.length;
       const after = afterPos >= hay.length ? '' : hay[afterPos];
       const word = /[a-z0-9]/;
-      const leftOk = !before || !word.test(before);
-      const rightOk = !after || !word.test(after);
 
-      if (leftOk && rightOk) return true;
+      if ((!before || !word.test(before)) && (!after || !word.test(after))) return true;
       from = at + needle.length;
     }
 
@@ -152,16 +179,16 @@
     const t = norm(text);
     const n = norm(targetName);
     const index = t.indexOf(n);
-    const around = index >= 0 ? t.slice(Math.max(0, index - 55), index + n.length + 55) : t;
+    const around = index >= 0 ? t.slice(Math.max(0, index - 58), index + n.length + 58) : t;
 
-    if (/add|create|put .* hand|shuffle/.test(around)) return 'creates / moves';
-    if (/gain|apply|channel/.test(around)) return 'grants / applies';
-    if (/deal|damage/.test(around)) return 'modifies';
-    if (/whenever|when |if /.test(around)) return 'references / triggers';
+    if (/add|create|put .* hand|shuffle|transform/.test(around)) return 'creates / moves';
+    if (/gain|apply|channel|inflict/.test(around)) return 'grants / applies';
+    if (/deal|damage|increase|additional/.test(around)) return 'modifies';
+    if (/whenever|when |if |start of|end of/.test(around)) return 'references / triggers';
     return 'references';
   }
 
-  function buildEdges(nodes) {
+  function buildEdges(nodes, manualLinks) {
     const edges = [];
     const edgeIds = new Set();
     const byId = new Map(nodes.map(n => [n.id, n]));
@@ -169,18 +196,25 @@
     const powers = nodes.filter(n => n.type === 'power');
     const candidates = nodes.filter(n => n.type !== 'keyword' && n.name && n.name.length >= 4);
 
-    const pushEdge = (source, target, relation) => {
+    const pushEdge = (source, target, relation, provenance, note) => {
       if (!byId.has(source) || !byId.has(target) || source === target) return;
       const id = source + '|' + target + '|' + relation;
       if (edgeIds.has(id)) return;
       edgeIds.add(id);
-      edges.push({ id, source, target, relation });
+      edges.push({
+        id,
+        source,
+        target,
+        relation,
+        provenance: provenance || 'description',
+        note: note || ''
+      });
     };
 
     for (const card of cards) {
       for (const kw of card.keywords || []) {
         const target = nodeId('keyword', slug(kw));
-        if (byId.has(target)) pushEdge(card.id, target, 'has keyword');
+        if (byId.has(target)) pushEdge(card.id, target, 'has keyword', 'explicit');
       }
     }
 
@@ -191,7 +225,7 @@
       for (const target of candidates) {
         if (target.id === source.id) continue;
         if (containsEntityName(text, target.name)) {
-          pushEdge(source.id, target.id, inferRelation(text, target.name));
+          pushEdge(source.id, target.id, inferRelation(text, target.name), 'description');
         }
       }
     }
@@ -199,16 +233,48 @@
     for (const card of cards) {
       for (const power of powers) {
         const base = power.name.replace(/\s+Power$/i, '');
-        if (norm(card.name) === norm(base)) pushEdge(card.id, power.id, 'grants');
+        if (norm(card.name) === norm(base)) {
+          pushEdge(card.id, power.id, 'grants', 'name-match');
+        }
       }
+    }
+
+    for (const link of manualLinks || []) {
+      pushEdge(link.source, link.target, link.relation || 'related', 'curated', link.note || '');
     }
 
     return edges;
   }
 
+  function buildAdjacency() {
+    state.outAdj = new Map();
+    state.inAdj = new Map();
+
+    for (const node of state.nodes) {
+      state.outAdj.set(node.id, []);
+      state.inAdj.set(node.id, []);
+    }
+
+    for (const edge of state.edges) {
+      if (state.outAdj.has(edge.source)) state.outAdj.get(edge.source).push(edge);
+      if (state.inAdj.has(edge.target)) state.inAdj.get(edge.target).push(edge);
+    }
+
+    for (const node of state.nodes) {
+      const degree = (state.outAdj.get(node.id) || []).length + (state.inAdj.get(node.id) || []).length;
+      node.degree = degree;
+      node.weight = Math.max(1, Math.min(28, degree + 1));
+    }
+  }
+
   function graphElements() {
     return [
-      ...state.nodes.map(n => ({ data: Object.assign({}, n, { label: n.name, color: TYPE_COLORS[n.type] }) })),
+      ...state.nodes.map(n => ({
+        data: Object.assign({}, n, {
+          label: n.name,
+          color: TYPE_COLORS[n.type]
+        })
+      })),
       ...state.edges.map(e => ({ data: e }))
     ];
   }
@@ -217,69 +283,100 @@
     state.cy = cytoscape({
       container: $('cy'),
       elements: graphElements(),
-      minZoom: 0.15,
-      maxZoom: 2.5,
-      wheelSensitivity: 0.2,
+      minZoom: 0.12,
+      maxZoom: 2.8,
+      wheelSensitivity: 0.18,
       style: [
         {
           selector: 'node',
           style: {
             'background-color': 'data(color)',
             'label': 'data(label)',
-            'color': '#d8dce5',
-            'font-size': 10,
+            'color': '#c9c9c9',
+            'font-size': 9,
+            'min-zoomed-font-size': 8,
             'text-valign': 'bottom',
-            'text-margin-y': 7,
+            'text-margin-y': 6,
             'text-outline-width': 2,
-            'text-outline-color': '#0b0c0f',
-            'width': 12,
-            'height': 12,
+            'text-outline-color': '#1e1e1e',
+            'width': 'mapData(weight, 1, 28, 8, 26)',
+            'height': 'mapData(weight, 1, 28, 8, 26)',
             'border-width': 1,
-            'border-color': '#161a22',
-            'opacity': 0.92
+            'border-color': '#171717',
+            'opacity': 0.82
           }
         },
         {
           selector: 'node[type = "relic"]',
-          style: { 'shape': 'diamond', 'width': 15, 'height': 15 }
+          style: { 'shape': 'diamond' }
         },
         {
           selector: 'node[type = "keyword"]',
-          style: { 'shape': 'round-rectangle', 'width': 16, 'height': 10 }
+          style: { 'shape': 'round-rectangle', 'height': 9 }
         },
         {
           selector: 'edge',
           style: {
             'width': 0.7,
-            'line-color': '#3b4350',
-            'target-arrow-color': '#3b4350',
+            'line-color': '#525252',
+            'target-arrow-color': '#525252',
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
-            'arrow-scale': 0.65,
-            'opacity': 0.45
+            'arrow-scale': 0.55,
+            'opacity': 0.28
           }
         },
-        { selector: '.dimmed', style: { 'opacity': 0.06 } },
+        {
+          selector: 'edge[provenance = "description"]',
+          style: { 'line-style': 'dotted', 'opacity': 0.2 }
+        },
+        {
+          selector: 'edge[provenance = "curated"]',
+          style: {
+            'line-color': '#8a79f2',
+            'target-arrow-color': '#8a79f2',
+            'width': 1.3,
+            'opacity': 0.7
+          }
+        },
+        {
+          selector: '.dimmed',
+          style: { 'opacity': 0.07, 'text-opacity': 0 }
+        },
+        {
+          selector: '.neighbor',
+          style: { 'opacity': 0.95, 'text-opacity': 1 }
+        },
+        {
+          selector: 'edge.neighbor',
+          style: {
+            'opacity': 0.75,
+            'width': 1.15,
+            'line-color': '#777184',
+            'target-arrow-color': '#777184'
+          }
+        },
         {
           selector: '.focused',
           style: {
             'opacity': 1,
-            'border-width': 3,
-            'border-color': '#f0d18c',
-            'width': 22,
-            'height': 22,
-            'font-size': 12,
+            'text-opacity': 1,
+            'border-width': 2.5,
+            'border-color': '#b5a9ff',
+            'width': 27,
+            'height': 27,
+            'font-size': 11,
             'z-index': 99
           }
         },
-        { selector: '.neighbor', style: { 'opacity': 1 } },
         {
-          selector: 'edge.neighbor',
+          selector: '.hovered',
           style: {
-            'opacity': 0.9,
-            'width': 1.6,
-            'line-color': '#7b8495',
-            'target-arrow-color': '#7b8495'
+            'opacity': 1,
+            'text-opacity': 1,
+            'border-width': 2,
+            'border-color': '#8f83df',
+            'z-index': 90
           }
         }
       ],
@@ -287,19 +384,22 @@
         name: 'cose',
         animate: false,
         randomize: true,
-        componentSpacing: 70,
-        nodeRepulsion: 6500,
-        idealEdgeLength: 75,
-        edgeElasticity: 0.12,
-        gravity: 0.18,
-        numIter: 600
+        componentSpacing: 52,
+        nodeRepulsion: 7200,
+        idealEdgeLength: 70,
+        edgeElasticity: 0.13,
+        gravity: 0.12,
+        numIter: 520
       }
     });
 
     state.cy.on('tap', 'node', evt => focusNode(evt.target.id()));
     state.cy.on('tap', evt => {
-      if (evt.target === state.cy) clearFocus();
+      if (evt.target === state.cy && state.viewMode === 'global') clearFocus();
     });
+
+    state.cy.on('mouseover', 'node', evt => evt.target.addClass('hovered'));
+    state.cy.on('mouseout', 'node', evt => evt.target.removeClass('hovered'));
   }
 
   function renderTypeFilters() {
@@ -311,8 +411,6 @@
       input.addEventListener('change', () => {
         if (input.checked) state.visibleTypes.add(input.dataset.type);
         else state.visibleTypes.delete(input.dataset.type);
-
-        clearFocus(false);
         applyFilters();
       });
     });
@@ -328,15 +426,14 @@
   function optionize(el, values, formatter) {
     formatter = formatter || (v => v);
     const first = el.options[0].outerHTML;
-
     el.innerHTML = first + values
       .filter(Boolean)
       .sort((a, b) => String(a).localeCompare(String(b)))
-      .map(v => '<option value="' + String(v).replace(/"/g, '&quot;') + '">' + formatter(v) + '</option>')
+      .map(v => '<option value="' + htmlEsc(v) + '">' + htmlEsc(formatter(v)) + '</option>')
       .join('');
   }
 
-  function setupFilters() {
+  function setupControls() {
     renderTypeFilters();
     renderLegend();
 
@@ -353,24 +450,32 @@
 
     optionize($('cost-filter'), costs, v => v === -1 ? 'X' : v);
 
-    ['search-input', 'color-filter', 'rarity-filter', 'card-type-filter', 'cost-filter', 'isolated-filter'].forEach(id => {
-      $(id).addEventListener(id === 'search-input' ? 'input' : 'change', () => {
-        clearFocus(false);
-        applyFilters();
+    ['search-input', 'color-filter', 'rarity-filter', 'card-type-filter', 'cost-filter', 'isolated-filter', 'incoming-filter', 'outgoing-filter'].forEach(id => {
+      $(id).addEventListener(id === 'search-input' ? 'input' : 'change', applyFilters);
+    });
+
+    $('global-mode').addEventListener('click', () => setViewMode('global'));
+    $('local-mode').addEventListener('click', () => setViewMode('local'));
+
+    document.querySelectorAll('.depth-button').forEach(button => {
+      button.addEventListener('click', () => {
+        state.depth = Number(button.dataset.depth);
+        document.querySelectorAll('.depth-button').forEach(b => b.classList.toggle('active', b === button));
+        if (state.viewMode === 'local') applyFilters();
       });
     });
 
     $('reset-filters').addEventListener('click', resetFilters);
-    $('clear-focus').addEventListener('click', () => clearFocus());
-    $('fit-graph').addEventListener('click', () => state.cy.fit(state.cy.elements(':visible'), 45));
+    $('clear-focus').addEventListener('click', clearFocus);
+    $('fit-graph').addEventListener('click', () => state.cy.fit(state.cy.elements(':visible'), 55));
 
     $('zoom-in').addEventListener('click', () => state.cy.zoom({
-      level: Math.min(state.cy.zoom() * 1.2, 2.5),
+      level: Math.min(state.cy.zoom() * 1.18, 2.8),
       renderedPosition: { x: $('graph-stage').clientWidth / 2, y: $('graph-stage').clientHeight / 2 }
     }));
 
     $('zoom-out').addEventListener('click', () => state.cy.zoom({
-      level: Math.max(state.cy.zoom() / 1.2, 0.15),
+      level: Math.max(state.cy.zoom() / 1.18, 0.12),
       renderedPosition: { x: $('graph-stage').clientWidth / 2, y: $('graph-stage').clientHeight / 2 }
     }));
 
@@ -379,13 +484,40 @@
     $('inspector-toggle').addEventListener('click', () => $('inspector-panel').classList.add('open'));
     $('inspector-close').addEventListener('click', () => $('inspector-panel').classList.remove('open'));
 
+    $('command-button').addEventListener('click', openPalette);
+    $('palette-backdrop').addEventListener('mousedown', e => {
+      if (e.target === $('palette-backdrop')) closePalette();
+    });
+    $('palette-input').addEventListener('input', updatePalette);
+    $('palette-input').addEventListener('keydown', handlePaletteKeys);
+
     document.addEventListener('keydown', e => {
+      const ctrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k';
+      if (ctrlK) {
+        e.preventDefault();
+        openPalette();
+        return;
+      }
+
       if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
         e.preventDefault();
         $('search-input').focus();
       }
-      if (e.key === 'Escape') clearFocus();
+
+      if (e.key === 'Escape') {
+        if (!$('palette-backdrop').classList.contains('hidden')) closePalette();
+        else clearFocus();
+      }
     });
+  }
+
+  function setViewMode(mode) {
+    state.viewMode = mode;
+    $('global-mode').classList.toggle('active', mode === 'global');
+    $('local-mode').classList.toggle('active', mode === 'local');
+    $('depth-controls').classList.toggle('disabled', mode !== 'local');
+    $('selection-hint').classList.toggle('hidden', !(mode === 'local' && !state.focusedId));
+    applyFilters();
   }
 
   function matchesFilters(n) {
@@ -409,58 +541,140 @@
     return true;
   }
 
+  function collectLocal(startId, baseAllowed) {
+    if (!startId || !baseAllowed.has(startId)) return new Set();
+
+    const incoming = $('incoming-filter').checked;
+    const outgoing = $('outgoing-filter').checked;
+    const found = new Set([startId]);
+    let frontier = new Set([startId]);
+
+    for (let step = 0; step < state.depth; step++) {
+      const next = new Set();
+
+      for (const id of frontier) {
+        if (outgoing) {
+          for (const edge of state.outAdj.get(id) || []) {
+            if (baseAllowed.has(edge.target) && !found.has(edge.target)) {
+              found.add(edge.target);
+              next.add(edge.target);
+            }
+          }
+        }
+
+        if (incoming) {
+          for (const edge of state.inAdj.get(id) || []) {
+            if (baseAllowed.has(edge.source) && !found.has(edge.source)) {
+              found.add(edge.source);
+              next.add(edge.source);
+            }
+          }
+        }
+      }
+
+      frontier = next;
+      if (!frontier.size) break;
+    }
+
+    return found;
+  }
+
   function applyFilters() {
-    const allowed = new Set(state.nodes.filter(matchesFilters).map(n => n.id));
+    if (!state.cy) return;
+
+    const baseAllowed = new Set(state.nodes.filter(matchesFilters).map(n => n.id));
+    let visible = new Set(baseAllowed);
+
+    if (state.viewMode === 'local' && state.focusedId && baseAllowed.has(state.focusedId)) {
+      visible = collectLocal(state.focusedId, baseAllowed);
+    }
+
+    const visibleEdges = state.edges.filter(e => visible.has(e.source) && visible.has(e.target));
+
+    if ($('isolated-filter').checked && !$('search-input').value && state.viewMode === 'global') {
+      const connected = new Set();
+      for (const edge of visibleEdges) {
+        connected.add(edge.source);
+        connected.add(edge.target);
+      }
+      visible = new Set([...visible].filter(id => connected.has(id) || id === state.focusedId));
+    }
 
     state.cy.batch(() => {
-      state.cy.nodes().forEach(n => {
-        n.style('display', allowed.has(n.id()) ? 'element' : 'none');
+      state.cy.nodes().forEach(node => {
+        node.style('display', visible.has(node.id()) ? 'element' : 'none');
       });
 
-      state.cy.edges().forEach(e => {
-        const visible = allowed.has(e.source().id()) && allowed.has(e.target().id());
-        e.style('display', visible ? 'element' : 'none');
+      state.cy.edges().forEach(edge => {
+        const show = visible.has(edge.source().id()) && visible.has(edge.target().id());
+        edge.style('display', show ? 'element' : 'none');
       });
-
-      if ($('isolated-filter').checked) {
-        state.cy.nodes(':visible').forEach(n => {
-          if (n.connectedEdges(':visible').length === 0) n.style('display', 'none');
-        });
-      }
     });
 
-    const visibleNodes = state.cy.nodes(':visible').length;
-    const visibleEdges = state.cy.edges(':visible').length;
-    $('graph-summary').textContent = visibleNodes + ' nodes · ' + visibleEdges + ' relationships';
+    if (state.viewMode === 'global') applyGlobalFocusClasses();
+    else applyLocalFocusClasses();
 
-    relayout();
+    const nodeCount = state.cy.nodes(':visible').length;
+    const edgeCount = state.cy.edges(':visible').length;
+    const modeLabel = state.viewMode === 'local' ? 'local · depth ' + state.depth : 'global';
+    $('graph-summary').textContent = modeLabel + ' · ' + nodeCount + ' nodes · ' + edgeCount + ' links';
+    $('selection-hint').classList.toggle('hidden', !(state.viewMode === 'local' && !state.focusedId));
+
+    scheduleRelayout();
+  }
+
+  function applyGlobalFocusClasses() {
+    state.cy.elements().removeClass('dimmed neighbor focused');
+
+    if (!state.focusedId) return;
+
+    const node = state.cy.getElementById(state.focusedId);
+    if (!node || node.empty() || node.style('display') === 'none') return;
+
+    state.cy.elements(':visible').addClass('dimmed');
+    const hood = node.closedNeighborhood(':visible');
+    hood.removeClass('dimmed').addClass('neighbor');
+    node.addClass('focused');
+  }
+
+  function applyLocalFocusClasses() {
+    state.cy.elements().removeClass('dimmed neighbor focused');
+    if (!state.focusedId) return;
+
+    state.cy.nodes(':visible').addClass('neighbor');
+    state.cy.edges(':visible').addClass('neighbor');
+
+    const node = state.cy.getElementById(state.focusedId);
+    if (node && !node.empty()) node.addClass('focused');
+  }
+
+  function scheduleRelayout() {
+    clearTimeout(state.layoutTimer);
+    state.layoutTimer = setTimeout(relayout, 90);
   }
 
   function relayout() {
+    const visible = state.cy.elements(':visible');
     const count = state.cy.nodes(':visible').length;
-    const layout = count < 160
-      ? {
-          name: 'cose',
-          animate: false,
-          fit: true,
-          padding: 45,
-          randomize: false,
-          nodeRepulsion: 6000,
-          idealEdgeLength: 78,
-          gravity: 0.2,
-          numIter: 350
-        }
-      : {
-          name: 'grid',
-          animate: false,
-          fit: true,
-          padding: 45,
-          avoidOverlap: true,
-          spacingFactor: 1.25
-        };
+    if (!count) return;
+
+    const local = state.viewMode === 'local' && state.focusedId;
+    const layout = {
+      name: 'cose',
+      animate: false,
+      fit: true,
+      padding: local ? 85 : 55,
+      randomize: false,
+      componentSpacing: local ? 70 : 46,
+      nodeRepulsion: local ? 8500 : 6100,
+      idealEdgeLength: local ? 105 : 72,
+      edgeElasticity: 0.12,
+      gravity: local ? 0.32 : 0.11,
+      numIter: count > 350 ? 180 : 320
+    };
 
     try {
-      state.cy.elements(':visible').layout(layout).run();
+      visible.layout(layout).run();
     } catch (err) {
       console.warn(err);
     }
@@ -472,36 +686,44 @@
 
     state.focusedId = id;
     $('clear-focus').disabled = false;
-
-    const neighborhood = node.closedNeighborhood();
-    state.cy.elements().addClass('dimmed').removeClass('focused neighbor');
-    neighborhood.removeClass('dimmed').addClass('neighbor');
-    node.addClass('focused');
-
-    state.cy.animate({
-      fit: { eles: neighborhood, padding: 90 },
-      duration: 250
-    });
-
     renderInspector(id);
 
-    if (window.innerWidth <= 980) {
-      $('inspector-panel').classList.add('open');
+    if (state.viewMode === 'local') {
+      applyFilters();
+    } else {
+      applyGlobalFocusClasses();
+      const hood = node.closedNeighborhood(':visible');
+      state.cy.animate({ fit: { eles: hood, padding: 90 }, duration: 180 });
     }
+
+    if (window.innerWidth <= 900) $('inspector-panel').classList.add('open');
   }
 
-  function clearFocus(recenter) {
-    if (recenter === undefined) recenter = true;
+  function clearFocus() {
     state.focusedId = null;
     if (!state.cy) return;
 
-    state.cy.elements().removeClass('dimmed focused neighbor');
     $('clear-focus').disabled = true;
+    state.cy.elements().removeClass('dimmed neighbor focused');
+
     $('entity-card').classList.add('hidden');
     $('inspector-empty').classList.remove('hidden');
-    $('inspector-hint').textContent = 'Select a node to see what it connects to.';
+    $('note-path').textContent = 'No note selected';
+    $('note-panel-title').textContent = 'Reading view';
 
-    if (recenter) state.cy.fit(state.cy.elements(':visible'), 45);
+    applyFilters();
+  }
+
+  function relationRow(edge, node, direction) {
+    const provenance = edge.provenance === 'curated' ? 'curated' :
+      edge.provenance === 'explicit' ? 'explicit' :
+      edge.provenance === 'name-match' ? 'matched' : 'text';
+
+    return '<div class="relation" data-target="' + htmlEsc(node.id) + '">' +
+      '<span class="relation-dot" style="background:' + TYPE_COLORS[node.type] + '"></span>' +
+      '<div><div class="relation-name">' + htmlEsc(node.name) + '</div>' +
+      '<div class="relation-type">' + htmlEsc(direction + ' · ' + edge.relation) +
+      ' · <span class="relation-provenance">' + provenance + '</span></div></div></div>';
   }
 
   function renderInspector(id) {
@@ -511,46 +733,44 @@
     $('inspector-empty').classList.add('hidden');
     $('entity-card').classList.remove('hidden');
 
-    const singular = TYPE_LABELS[n.type].replace(/s$/, '');
-    $('entity-kicker').textContent = singular;
+    $('note-path').textContent = TYPE_FOLDERS[n.type] + ' / ' + n.name + '.md';
+    $('note-panel-title').textContent = 'Reading view';
+    $('entity-kicker').textContent = TYPE_LABELS[n.type].replace(/s$/, '');
     $('entity-name').textContent = n.name;
 
     const chips = [
       n.color,
       n.rarity,
       n.cardType,
-      n.cost !== undefined && n.type === 'card' ? (n.cost === -1 ? 'X cost' : n.cost + ' cost') : ''
+      n.cost !== undefined && n.type === 'card' ? (n.cost === -1 ? 'X cost' : n.cost + ' cost') : '',
+      n.degree ? n.degree + ' links' : ''
     ].filter(Boolean);
 
-    $('entity-meta').innerHTML = chips.map(c => '<span class="chip">' + c + '</span>').join('');
+    $('entity-meta').innerHTML = chips.map(c => '<span class="chip">' + htmlEsc(c) + '</span>').join('');
     $('entity-description').textContent = n.description || 'No description available.';
 
-    const connected = state.edges
-      .filter(e => e.source === id || e.target === id)
-      .map(e => {
-        const otherId = e.source === id ? e.target : e.source;
-        return { edge: e, node: state.nodes.find(x => x.id === otherId) };
-      })
-      .filter(x => x.node);
+    const outgoing = (state.outAdj.get(id) || []).map(edge => ({
+      edge,
+      node: state.nodes.find(x => x.id === edge.target)
+    })).filter(x => x.node);
 
-    $('relations-count').textContent = connected.length;
+    const incoming = (state.inAdj.get(id) || []).map(edge => ({
+      edge,
+      node: state.nodes.find(x => x.id === edge.source)
+    })).filter(x => x.node);
 
-    if (!connected.length) {
-      $('relations-list').innerHTML = '<div class="entity-description">No explicit relationships found in the current dataset.</div>';
-      return;
-    }
+    $('outgoing-count').textContent = outgoing.length;
+    $('backlinks-count').textContent = incoming.length;
 
-    $('relations-list').innerHTML = connected.slice(0, 120).map(item => {
-      const edge = item.edge;
-      const node = item.node;
+    $('outgoing-list').innerHTML = outgoing.length
+      ? outgoing.slice(0, 150).map(item => relationRow(item.edge, item.node, 'to')).join('')
+      : '<div class="empty-links">No outgoing links.</div>';
 
-      return '<div class="relation" data-target="' + node.id + '">' +
-        '<span class="relation-dot" style="background:' + TYPE_COLORS[node.type] + '"></span>' +
-        '<div><div class="relation-name">' + node.name + '</div>' +
-        '<div class="relation-type">' + edge.relation + ' · ' + TYPE_LABELS[node.type].replace(/s$/, '') + '</div></div></div>';
-    }).join('');
+    $('backlinks-list').innerHTML = incoming.length
+      ? incoming.slice(0, 150).map(item => relationRow(item.edge, item.node, 'from')).join('')
+      : '<div class="empty-links">No backlinks.</div>';
 
-    $('relations-list').querySelectorAll('.relation').forEach(el => {
+    document.querySelectorAll('.relation[data-target]').forEach(el => {
       el.addEventListener('click', () => focusNode(el.dataset.target));
     });
   }
@@ -562,12 +782,98 @@
     $('card-type-filter').value = 'all';
     $('cost-filter').value = 'all';
     $('isolated-filter').checked = true;
+    $('incoming-filter').checked = true;
+    $('outgoing-filter').checked = true;
 
     state.visibleTypes = new Set(Object.keys(TYPE_LABELS));
     $('type-filters').querySelectorAll('input').forEach(i => i.checked = true);
 
-    clearFocus(false);
     applyFilters();
+  }
+
+  function openPalette() {
+    $('palette-backdrop').classList.remove('hidden');
+    $('palette-input').value = '';
+    state.paletteIndex = 0;
+    updatePalette();
+    setTimeout(() => $('palette-input').focus(), 0);
+  }
+
+  function closePalette() {
+    $('palette-backdrop').classList.add('hidden');
+  }
+
+  function updatePalette() {
+    const q = norm($('palette-input').value);
+
+    state.paletteMatches = state.nodes
+      .filter(n => !q || norm(n.name).includes(q) || norm(n.description).includes(q))
+      .sort((a, b) => {
+        const aExact = q && norm(a.name) === q ? 1 : 0;
+        const bExact = q && norm(b.name) === q ? 1 : 0;
+        if (aExact !== bExact) return bExact - aExact;
+
+        const aStart = q && norm(a.name).startsWith(q) ? 1 : 0;
+        const bStart = q && norm(b.name).startsWith(q) ? 1 : 0;
+        if (aStart !== bStart) return bStart - aStart;
+
+        return (b.degree || 0) - (a.degree || 0) || a.name.localeCompare(b.name);
+      })
+      .slice(0, 14);
+
+    state.paletteIndex = Math.min(state.paletteIndex, Math.max(0, state.paletteMatches.length - 1));
+
+    $('palette-results').innerHTML = state.paletteMatches.length
+      ? state.paletteMatches.map((n, index) =>
+          '<div class="palette-result' + (index === state.paletteIndex ? ' active' : '') + '" data-id="' + htmlEsc(n.id) + '">' +
+          '<span class="palette-result-dot" style="background:' + TYPE_COLORS[n.type] + '"></span>' +
+          '<span class="palette-result-name">' + htmlEsc(n.name) + '</span>' +
+          '<span class="palette-result-meta">' + htmlEsc(TYPE_LABELS[n.type].replace(/s$/, '')) + '</span></div>'
+        ).join('')
+      : '<div class="empty-links">No matching notes.</div>';
+
+    $('palette-results').querySelectorAll('.palette-result').forEach(el => {
+      el.addEventListener('click', () => openPaletteResult(el.dataset.id));
+    });
+  }
+
+  function handlePaletteKeys(e) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      state.paletteIndex = Math.min(state.paletteIndex + 1, state.paletteMatches.length - 1);
+      updatePalette();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      state.paletteIndex = Math.max(state.paletteIndex - 1, 0);
+      updatePalette();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const selected = state.paletteMatches[state.paletteIndex];
+      if (selected) openPaletteResult(selected.id);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closePalette();
+    }
+  }
+
+  function openPaletteResult(id) {
+    closePalette();
+
+    const nodeData = state.nodes.find(n => n.id === id);
+    if (!nodeData) return;
+
+    if (!matchesFilters(nodeData)) {
+      $('search-input').value = '';
+      $('color-filter').value = 'all';
+      $('rarity-filter').value = 'all';
+      $('card-type-filter').value = 'all';
+      $('cost-filter').value = 'all';
+      state.visibleTypes.add(nodeData.type);
+      const typeBox = $('type-filters').querySelector('input[data-type="' + nodeData.type + '"]');
+      if (typeBox) typeBox.checked = true;
+    }
+
+    focusNode(id);
   }
 
   async function boot() {
@@ -577,20 +883,23 @@
       );
 
       const raw = Object.fromEntries(entries);
+      const manualLinks = await loadOptionalJson('./data/manual-links.json', []);
+
       state.nodes = normalizeData(raw);
-      state.edges = buildEdges(state.nodes);
+      state.edges = buildEdges(state.nodes, manualLinks);
+      buildAdjacency();
 
       initGraph();
-      setupFilters();
-      applyFilters();
+      setupControls();
+      setViewMode('global');
 
       $('loading-state').classList.add('hidden');
       $('dataset-status').classList.add('ready');
-      $('dataset-status').innerHTML = '<span class="status-dot"></span><span>Live dataset</span>';
-      $('data-count').textContent = state.nodes.length + ' entities · ' + state.edges.length + ' explicit/inferred links';
+      $('dataset-status').innerHTML = '<span class="status-dot"></span><span>Vault ready</span>';
+      $('data-count').textContent = state.nodes.length + ' notes · ' + state.edges.length + ' links';
     } catch (err) {
       console.error(err);
-      $('loading-state').innerHTML = '<strong>Could not load STS2 data</strong><span>' + err.message + '</span>';
+      $('loading-state').innerHTML = '<strong>Could not load STS2 data</strong><span>' + htmlEsc(err.message) + '</span>';
       $('dataset-status').innerHTML = '<span class="status-dot"></span><span>Data unavailable</span>';
     }
   }
