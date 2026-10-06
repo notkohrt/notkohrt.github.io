@@ -393,6 +393,8 @@
       if (/\bfor each\b[^.\n]{0,46}\bplayed\b/.test(t)) return 'scales with cards played';
       if (/\bnext\b[^.\n]{0,36}\b(?:skill|attack|card)\b[^.\n]{0,30}\bplay(?:ed)?\b/.test(t)) return 'modifies next card play';
       if (/\bplayed\s+an\s+(?:extra|additional)\s+time\b/.test(t)) return 'repeats card play';
+      if (/\bfree\s+to\s+play\b/.test(t)) return 'modifies card play';
+      if (/\b(?:can only|cannot|can't|may not)\b[^.\n]{0,28}\bplayed?\b/.test(t)) return 'restricts card play';
       return 'plays cards';
     }
 
@@ -538,7 +540,7 @@
         if (target.id === source.id) continue;
         if (containsEntityName(text, target.name)) {
           for (const relation of inferRelations(text, target.name)) {
-            const provenance = ['creates','transforms','applies','scales with','grants','plays','discards','exhausts','requires','triggers','triggers on','modifies'].includes(relation)
+            const provenance = ['creates','transforms','removes','reduces','applies','scales with','grants','plays','discards','exhausts','requires','triggers','triggers on','modifies'].includes(relation)
               ? 'derived'
               : 'description';
             pushEdge(source.id, target.id, relation, provenance);
