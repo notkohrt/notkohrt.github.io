@@ -165,9 +165,11 @@ function entityAliases(name) {
   return [...aliases].sort((a, b) => b.length - a.length);
 }
 
-function findEntityMention(text, name) {
+function findEntityMentions(text, name) {
   const hay = norm(text).replace(/[{}]/g, '');
-  if (!hay) return null;
+  if (!hay) return [];
+
+  const found = [];
 
   for (const alias of entityAliases(name)) {
     let from = 0;
@@ -182,31 +184,36 @@ function findEntityMention(text, name) {
       const word = /[a-z0-9]/;
 
       if ((!before || !word.test(before)) && (!after || !word.test(after))) {
-        return { index: at, alias };
+        found.push({ index: at, alias });
       }
 
       from = at + alias.length;
     }
   }
 
-  return null;
+  return found
+    .sort((a, b) => a.index - b.index || b.alias.length - a.alias.length)
+    .filter((item, index, items) =>
+      index === 0 || item.index !== items[index - 1].index
+    );
+}
+
+function findEntityMention(text, name) {
+  return findEntityMentions(text, name)[0] || null;
 }
 
 function containsEntityName(text, name) {
   return Boolean(findEntityMention(text, name));
 }
 
-function inferRelation(text, targetName) {
+function inferRelationAt(text, mention) {
   const t = norm(text).replace(/[{}]/g, '');
-  const mention = findEntityMention(text, targetName);
-  if (!mention) return 'references';
-
   const before = t.slice(Math.max(0, mention.index - 72), mention.index);
   const after = t.slice(mention.index + mention.alias.length, mention.index + mention.alias.length + 72);
   const clauseBefore = before.split(/[.\n]/).pop() || before;
   const clauseAfter = after.split(/[.\n]/)[0] || after;
 
-  if (/\b(?:whenever|when|every|each time|if)\b/.test(clauseBefore) &&
+  if (/\b(?:whenever|when|each time|if|every\s+\d+\s+times)\b/.test(clauseBefore) &&
       /\b(?:play|apply|draw|discard|exhaust|gain|lose|create|deal)\b/.test(clauseBefore)) {
     return 'triggers on';
   }
@@ -214,10 +221,12 @@ function inferRelation(text, targetName) {
   if (/\b(?:add|create|shuffle|put)\b[^.\n]{0,42}$/.test(clauseBefore)) return 'creates';
   if (/\btransform\b[^.\n]{0,34}$/.test(clauseBefore)) return 'transforms';
   if (/\b(?:apply|inflict)\b[^.\n]{0,30}$/.test(clauseBefore)) return 'applies';
+  if (/\bequal to\b[^.\n]{0,24}$/.test(clauseBefore)) return 'scales with';
   if (/\bgain\b[^.\n]{0,28}$/.test(clauseBefore)) return 'grants';
   if (/\b(?:play|plays|played|playing)\b[^.\n]{0,26}$/.test(clauseBefore)) return 'plays';
   if (/\bdiscard(?:s|ed|ing)?\b[^.\n]{0,26}$/.test(clauseBefore)) return 'discards';
   if (/\bexhaust(?:s|ed|ing)?\b[^.\n]{0,26}$/.test(clauseBefore)) return 'exhausts';
+
   if (/^\s*(?:is\s+)?triggered\b/.test(clauseAfter)) return 'triggers';
   if (/^\s*(?:(?:enemies|creatures|cards|shivs?)\s+)?(?:now\s+)?(?:deal|deals|gain|gains|take|takes|cost|costs|hit|hits|reduce|reduces|increase|increases)\b/.test(clauseAfter)) {
     return 'modifies';
@@ -229,6 +238,14 @@ function inferRelation(text, targetName) {
 
   if (/\b(?:additional|double|more|less|increase|reduce|damage)\b/.test(clauseAfter)) return 'modifies';
   return 'references';
+}
+
+function inferRelations(text, targetName) {
+  return [...new Set(findEntityMentions(text, targetName).map(mention => inferRelationAt(text, mention)))];
+}
+
+function inferRelation(text, targetName) {
+  return inferRelations(text, targetName)[0] || 'references';
 }
 
 function buildDetectedEdges(nodes, cardPowers) {
@@ -281,11 +298,12 @@ function buildDetectedEdges(nodes, cardPowers) {
     for (const target of candidates) {
       if (target.id === source.id) continue;
       if (containsEntityName(source.description, target.name)) {
-        const relation = inferRelation(source.description, target.name);
-        const provenance = ['creates','transforms','applies','grants','plays','discards','exhausts','requires','triggers','triggers on','modifies'].includes(relation)
-          ? 'derived'
-          : 'description';
-        push(source.id, target.id, relation, provenance);
+        for (const relation of inferRelations(source.description, target.name)) {
+          const provenance = ['creates','transforms','applies','scales with','grants','plays','discards','exhausts','requires','triggers','triggers on','modifies'].includes(relation)
+            ? 'derived'
+            : 'description';
+          push(source.id, target.id, relation, provenance);
+        }
       }
     }
 
