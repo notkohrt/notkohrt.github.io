@@ -186,3 +186,14 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
   .brand-subtitle{display:none}.brand-title{display:none}.view-controls{gap:6px}.segment{padding:0 9px}
   .command-button{display:none}
 }
+
+.entity-facts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:14px 0 2px}
+.fact-card{border:1px solid var(--line-soft);background:#242424;border-radius:6px;padding:7px 8px}
+.fact-label{font-size:8.5px;color:#6f6f6f;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px}
+.fact-value{font-size:10.5px;color:#bdbdbd;word-break:break-word}
+.upgrade-section{padding-top:2px}
+.upgrade-card{border:1px solid #3c3850;background:rgba(127,109,242,.055);border-radius:7px;padding:9px 10px;color:#c7c3d8;font-size:10.5px;line-height:1.55;white-space:pre-line}
+.upgrade-delta{display:flex;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px solid rgba(127,109,242,.08)}
+.upgrade-delta:last-child{border-bottom:0}
+.upgrade-key{color:#8d84b8}
+.upgrade-value{color:#d3cee8;text-align:right}
