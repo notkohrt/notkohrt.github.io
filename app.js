@@ -390,9 +390,10 @@
 
     if (effectId === 'PLAY_CARD') {
       if (/\b(?:whenever|when|each time)\b[^.\n]{0,52}\bplay(?:s|ed|ing)?\b/.test(t)) return 'triggers on card play';
+      if (/\bfirst\b[^.\n]{0,34}\bplay(?:s|ed|ing)?\b/.test(t)) return 'triggers on card play';
       if (/\bfor each\b[^.\n]{0,46}\bplayed\b/.test(t)) return 'scales with cards played';
-      if (/\bnext\b[^.\n]{0,36}\b(?:skill|attack|card)\b[^.\n]{0,30}\bplay(?:ed)?\b/.test(t)) return 'modifies next card play';
       if (/\bplayed\s+an\s+(?:extra|additional)\s+time\b/.test(t)) return 'repeats card play';
+      if (/\bnext\b[^.\n]{0,36}\b(?:skill|attack|card)\b[^.\n]{0,30}\bplay(?:ed)?\b/.test(t)) return 'modifies next card play';
       if (/\bfree\s+to\s+play\b/.test(t)) return 'modifies card play';
       if (/\b(?:can only|cannot|can't|may not)\b[^.\n]{0,28}\bplayed?\b/.test(t)) return 'restricts card play';
       return 'plays cards';
