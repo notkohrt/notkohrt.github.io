@@ -25,8 +25,24 @@ const FOLDERS = {
   enchantment: 'Enchantments',
   keyword: 'Keywords',
   mechanic: 'Mechanics',
-  tag: 'Tags'
+  tag: 'Tags',
+  effect: 'Effects'
 };
+
+const EFFECT_DEFS = [
+  { id:'DRAW', name:'Draw', description:'Draw cards from the Draw Pile into the Hand.', patterns:[/\bdraw(?:s|n)?\b/i], relation:'draws' },
+  { id:'DISCARD', name:'Discard', description:'Move cards from the Hand to the Discard Pile.', patterns:[/\bdiscard(?:s|ed|ing)?\b/i], relation:'discards' },
+  { id:'DAMAGE', name:'Damage', description:'Deal or take combat damage.', patterns:[/\bdeal(?:s)?\b[^.\n]*\bdamage\b/i,/\btake(?:s)?\b[^.\n]*\bdamage\b/i], relation:'deals / takes damage' },
+  { id:'HEAL', name:'Heal', description:'Restore Hit Points.', patterns:[/\bheal(?:s|ed|ing)?\b/i], relation:'heals' },
+  { id:'LOSE_HP', name:'Lose HP', description:'Lose Hit Points directly.', patterns:[/\blose(?:s)?\b[^.\n]*\bHP\b/i], relation:'loses HP' },
+  { id:'UPGRADE', name:'Upgrade', description:'Upgrade a card.', patterns:[/\bupgrade(?:s|d|ing)?\b/i], relation:'upgrades' },
+  { id:'TRANSFORM', name:'Transform', description:'Transform one card into another.', patterns:[/\btransform(?:s|ed|ing)?\b/i], relation:'transforms' },
+  { id:'CREATE_CARD', name:'Create Card', description:'Create or add a card during combat.', patterns:[/\bcreate(?:s|d|ing)?\b[^.\n]*\bcard/i,/\badd\b[^.\n]*\b(?:card|shiv|status|curse|attack|skill|power)\b[^.\n]*\b(?:hand|pile|deck)\b/i], relation:'creates' },
+  { id:'SHUFFLE', name:'Shuffle', description:'Shuffle cards or a pile.', patterns:[/\bshuffle(?:s|d|ing)?\b/i], relation:'shuffles' },
+  { id:'CHANNEL', name:'Channel', description:'Channel an Orb.', patterns:[/\bchannel(?:s|ed|ing)?\b/i], relation:'channels' },
+  { id:'EVOKE', name:'Evoke', description:'Evoke an Orb.', patterns:[/\bevoke(?:s|d|ing)?\b/i], relation:'evokes' },
+  { id:'COST_CHANGE', name:'Cost Modification', description:'Change the Energy cost of a card.', patterns:[/\bcost(?:s)?\b[^.\n]*(?:less|more|0|zero)/i,/\bfree to play\b/i], relation:'modifies cost' }
+];
 
 const START = '<!-- CURATED START -->';
 const END = '<!-- CURATED END -->';
@@ -100,7 +116,7 @@ function normalizeData(raw) {
     });
   }
 
-  for (const group of ['core_concepts', 'orbs']) {
+  for (const group of ['core_concepts', 'orbs', 'character_mechanics']) {
     for (const item of (raw.mechanics && raw.mechanics[group]) || []) {
       const name = String(item.title || item.name || item.id || '')
         .replace(/\s*\([^)]*\)\s*$/, '')
@@ -124,6 +140,13 @@ function normalizeData(raw) {
     nodes.push({
       id: nodeId('tag', slug(tag)), sourceId: slug(tag), type: 'tag',
       name: tag, description: 'Card tag used by Slay the Spire 2.'
+    });
+  }
+
+  for (const effect of EFFECT_DEFS) {
+    nodes.push({
+      id: nodeId('effect', effect.id), sourceId: effect.id, type: 'effect',
+      name: effect.name, description: effect.description, systemDerived: true
     });
   }
 
@@ -169,7 +192,19 @@ function buildDetectedEdges(nodes, cardPowers) {
   const byId = new Map(nodes.map(n => [n.id, n]));
   const cards = nodes.filter(n => n.type === 'card');
   const powers = nodes.filter(n => n.type === 'power');
-  const candidates = nodes.filter(n => n.type !== 'keyword' && n.name && n.name.length >= 4);
+
+  const candidateGroups = new Map();
+  for (const candidate of nodes.filter(n => !['keyword','effect'].includes(n.type) && n.name && n.name.length >= 4)) {
+    const key = norm(candidate.name);
+    if (!candidateGroups.has(key)) candidateGroups.set(key, []);
+    candidateGroups.get(key).push(candidate);
+  }
+  const candidates = [...candidateGroups.values()]
+    .filter(group => group.length === 1)
+    .map(group => group[0]);
+
+  const keywords = nodes.filter(n => n.type === 'keyword');
+  const effects = new Map(EFFECT_DEFS.map(effect => [effect.id, effect]));
   const edges = [];
   const seen = new Set();
 
@@ -194,7 +229,8 @@ function buildDetectedEdges(nodes, cardPowers) {
 
     for (const power of (cardPowers && cardPowers[card.sourceId]) || []) {
       const target = nodeId('power', power.id);
-      if (byId.has(target)) push(card.id, target, 'applies / grants', 'explicit');
+      const powerNode = byId.get(target);
+      if (powerNode) push(card.id, target, powerNode.rarity === 'Debuff' ? 'applies' : 'grants', 'explicit');
     }
   }
 
@@ -205,6 +241,28 @@ function buildDetectedEdges(nodes, cardPowers) {
         push(source.id, target.id, inferRelation(source.description, target.name), 'description');
       }
     }
+
+    for (const keyword of keywords) {
+      if (containsEntityName(source.description, keyword.name)) {
+        push(source.id, keyword.id, 'uses keyword', 'description');
+      }
+    }
+
+    for (const [effectId, effect] of effects) {
+      if (effect.patterns.some(pattern => pattern.test(source.description || ''))) {
+        push(source.id, nodeId('effect', effectId), effect.relation, 'derived');
+      }
+    }
+
+    const block = byId.get(nodeId('mechanic','BLOCK'));
+    const energy = byId.get(nodeId('mechanic','ENERGY'));
+    const hp = byId.get(nodeId('mechanic','HIT_POINTS'));
+
+    if (block && /\bgain(?:s)?\b[^.\n]*\bBlock\b/i.test(source.description || '')) push(source.id, block.id, 'grants', 'derived');
+    if (energy && /\bgain(?:s)?\b[^.\n]*(?:\[E\]|Energy)/i.test(source.description || '')) push(source.id, energy.id, 'grants', 'derived');
+    if (energy && /\blose(?:s)?\b[^.\n]*(?:\[E\]|Energy)/i.test(source.description || '')) push(source.id, energy.id, 'consumes', 'derived');
+    if (hp && /\bheal(?:s|ed|ing)?\b/i.test(source.description || '')) push(source.id, hp.id, 'restores', 'derived');
+    if (hp && /\blose(?:s)?\b[^.\n]*\bHP\b/i.test(source.description || '')) push(source.id, hp.id, 'reduces', 'derived');
   }
 
   for (const card of cards) {
