@@ -423,7 +423,13 @@
 
       for (const keyword of keywords) {
         if (containsEntityName(text, keyword.name)) {
-          pushEdge(source.id, keyword.id, 'uses keyword', 'description');
+          const relation = inferRelation(text, keyword.name);
+          pushEdge(
+            source.id,
+            keyword.id,
+            relation === 'references' ? 'uses keyword' : relation,
+            relation === 'references' ? 'description' : 'derived'
+          );
         }
       }
 
@@ -442,6 +448,19 @@
       if (energy && /\blose(?:s)?\b[^.\n]*(?:\[E\]|Energy)/i.test(text)) pushEdge(source.id, energy.id, 'consumes', 'derived');
       if (hp && /\bheal(?:s|ed|ing)?\b/i.test(text)) pushEdge(source.id, hp.id, 'restores', 'derived');
       if (hp && /\blose(?:s)?\b[^.\n]*\bHP\b/i.test(text)) pushEdge(source.id, hp.id, 'reduces', 'derived');
+    }
+
+    const ontologyEdges = [
+      ['effect:DRAW', 'mechanic:DRAW_PILE', 'draws from'],
+      ['effect:DISCARD', 'mechanic:DISCARD_PILE', 'moves to'],
+      ['keyword:EXHAUST', 'mechanic:EXHAUST_PILE', 'moves to'],
+      ['effect:HEAL', 'mechanic:HIT_POINTS', 'restores'],
+      ['effect:LOSE_HP', 'mechanic:HIT_POINTS', 'reduces'],
+      ['effect:COST_CHANGE', 'mechanic:ENERGY', 'modifies cost']
+    ];
+
+    for (const [source, target, relation] of ontologyEdges) {
+      pushEdge(source, target, relation, 'explicit');
     }
 
     for (const card of cards) {
