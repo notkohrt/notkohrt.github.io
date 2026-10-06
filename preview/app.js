@@ -9,6 +9,15 @@
   };
 
   const TYPE_COLORS = {
+    card: 0x8b83d6,
+    relic: 0xc19a63,
+    power: 0xa276bd,
+    potion: 0x65a7a1,
+    enchantment: 0xc9829f,
+    keyword: 0x7f9a72
+  };
+
+  const TYPE_CSS = {
     card: '#8b83d6',
     relic: '#c19a63',
     power: '#a276bd',
@@ -38,16 +47,46 @@
   const state = {
     nodes: [],
     edges: [],
-    cy: null,
+    byId: new Map(),
+    outAdj: new Map(),
+    inAdj: new Map(),
+
+    pixi: null,
+    world: null,
+    edgeLayer: null,
+    nodeLayer: null,
+    labelLayer: null,
+    overlayLayer: null,
+    hoverLabel: null,
+    focusLabel: null,
+    nodeViews: new Map(),
+    staticLabels: new Map(),
+
+    visibleNodes: [],
+    visibleEdges: [],
+    simEdges: [],
+    simulation: null,
+
     focusedId: null,
+    hoveredId: null,
     viewMode: 'global',
     depth: 1,
     visibleTypes: new Set(Object.keys(TYPE_LABELS)),
-    outAdj: new Map(),
-    inAdj: new Map(),
+
     paletteIndex: 0,
     paletteMatches: [],
-    layoutTimer: null
+
+    draggingNode: null,
+    panning: false,
+    panStart: null,
+    worldStart: null,
+
+    settings: {
+      center: 0.012,
+      repel: 170,
+      link: 0.28,
+      distance: 92
+    }
   };
 
   const $ = id => document.getElementById(id);
@@ -247,6 +286,7 @@
   }
 
   function buildAdjacency() {
+    state.byId = new Map(state.nodes.map(n => [n.id, n]));
     state.outAdj = new Map();
     state.inAdj = new Map();
 
@@ -261,145 +301,446 @@
     }
 
     for (const node of state.nodes) {
-      const degree = (state.outAdj.get(node.id) || []).length + (state.inAdj.get(node.id) || []).length;
-      node.degree = degree;
-      node.weight = Math.max(1, Math.min(28, degree + 1));
+      node.degree = (state.outAdj.get(node.id) || []).length + (state.inAdj.get(node.id) || []).length;
+      node.radius = 4.8 + Math.min(8.5, Math.sqrt(node.degree + 1) * 1.25);
+      if (!Number.isFinite(node.x)) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 40 + Math.random() * 260;
+        node.x = Math.cos(angle) * distance;
+        node.y = Math.sin(angle) * distance;
+      }
     }
   }
 
-  function graphElements() {
-    return [
-      ...state.nodes.map(n => ({
-        data: Object.assign({}, n, {
-          label: n.name,
-          color: TYPE_COLORS[n.type]
-        })
-      })),
-      ...state.edges.map(e => ({ data: e }))
-    ];
+  function initPixi() {
+    const host = $('graph-canvas');
+
+    state.pixi = new PIXI.Application({
+      resizeTo: host,
+      backgroundAlpha: 0,
+      antialias: true,
+      autoDensity: true,
+      resolution: Math.min(window.devicePixelRatio || 1, 2)
+    });
+
+    host.appendChild(state.pixi.view);
+
+    state.pixi.stage.eventMode = 'static';
+    state.pixi.stage.hitArea = state.pixi.screen;
+
+    state.world = new PIXI.Container();
+    state.edgeLayer = new PIXI.Graphics();
+    state.nodeLayer = new PIXI.Container();
+    state.labelLayer = new PIXI.Container();
+    state.overlayLayer = new PIXI.Container();
+
+    state.world.addChild(state.edgeLayer, state.nodeLayer, state.labelLayer, state.overlayLayer);
+    state.pixi.stage.addChild(state.world);
+
+    centerWorld();
+
+    state.hoverLabel = makeOverlayLabel();
+    state.focusLabel = makeOverlayLabel();
+    state.overlayLayer.addChild(state.hoverLabel, state.focusLabel);
+    state.hoverLabel.visible = false;
+    state.focusLabel.visible = false;
+
+    state.pixi.stage.on('pointerdown', onStagePointerDown);
+    state.pixi.stage.on('pointermove', onStagePointerMove);
+    state.pixi.stage.on('pointerup', onStagePointerUp);
+    state.pixi.stage.on('pointerupoutside', onStagePointerUp);
+
+    state.pixi.view.addEventListener('wheel', onWheel, { passive: false });
+
+    new ResizeObserver(() => {
+      state.pixi.stage.hitArea = state.pixi.screen;
+    }).observe(host);
+
+    state.pixi.ticker.add(renderFrame);
   }
 
-  function initGraph() {
-    state.cy = cytoscape({
-      container: $('cy'),
-      elements: graphElements(),
-      minZoom: 0.12,
-      maxZoom: 2.8,
-      wheelSensitivity: 0.18,
-      style: [
-        {
-          selector: 'node',
-          style: {
-            'background-color': 'data(color)',
-            'label': 'data(label)',
-            'color': '#c9c9c9',
-            'font-size': 9,
-            'min-zoomed-font-size': 8,
-            'text-valign': 'bottom',
-            'text-margin-y': 6,
-            'text-outline-width': 2,
-            'text-outline-color': '#1e1e1e',
-            'width': 'mapData(weight, 1, 28, 8, 26)',
-            'height': 'mapData(weight, 1, 28, 8, 26)',
-            'border-width': 1,
-            'border-color': '#171717',
-            'opacity': 0.82
-          }
-        },
-        {
-          selector: 'node[type = "relic"]',
-          style: { 'shape': 'diamond' }
-        },
-        {
-          selector: 'node[type = "keyword"]',
-          style: { 'shape': 'round-rectangle', 'height': 9 }
-        },
-        {
-          selector: 'edge',
-          style: {
-            'width': 0.7,
-            'line-color': '#525252',
-            'target-arrow-color': '#525252',
-            'target-arrow-shape': 'triangle',
-            'curve-style': 'bezier',
-            'arrow-scale': 0.55,
-            'opacity': 0.28
-          }
-        },
-        {
-          selector: 'edge[provenance = "description"]',
-          style: { 'line-style': 'dotted', 'opacity': 0.2 }
-        },
-        {
-          selector: 'edge[provenance = "curated"]',
-          style: {
-            'line-color': '#8a79f2',
-            'target-arrow-color': '#8a79f2',
-            'width': 1.3,
-            'opacity': 0.7
-          }
-        },
-        {
-          selector: '.dimmed',
-          style: { 'opacity': 0.07, 'text-opacity': 0 }
-        },
-        {
-          selector: '.neighbor',
-          style: { 'opacity': 0.95, 'text-opacity': 1 }
-        },
-        {
-          selector: 'edge.neighbor',
-          style: {
-            'opacity': 0.75,
-            'width': 1.15,
-            'line-color': '#777184',
-            'target-arrow-color': '#777184'
-          }
-        },
-        {
-          selector: '.focused',
-          style: {
-            'opacity': 1,
-            'text-opacity': 1,
-            'border-width': 2.5,
-            'border-color': '#b5a9ff',
-            'width': 27,
-            'height': 27,
-            'font-size': 11,
-            'z-index': 99
-          }
-        },
-        {
-          selector: '.hovered',
-          style: {
-            'opacity': 1,
-            'text-opacity': 1,
-            'border-width': 2,
-            'border-color': '#8f83df',
-            'z-index': 90
-          }
-        }
-      ],
-      layout: {
-        name: 'cose',
-        animate: false,
-        randomize: true,
-        componentSpacing: 52,
-        nodeRepulsion: 7200,
-        idealEdgeLength: 70,
-        edgeElasticity: 0.13,
-        gravity: 0.12,
-        numIter: 520
+  function makeOverlayLabel() {
+    const label = new PIXI.Text('', {
+      fontFamily: 'Inter, system-ui, sans-serif',
+      fontSize: 11,
+      fill: 0xe0e0e0,
+      stroke: 0x1e1e1e,
+      strokeThickness: 4,
+      align: 'center'
+    });
+    label.anchor.set(0.5, 0);
+    label.eventMode = 'none';
+    return label;
+  }
+
+  function centerWorld() {
+    if (!state.pixi || !state.world) return;
+    state.world.scale.set(1);
+    state.world.position.set(state.pixi.screen.width / 2, state.pixi.screen.height / 2);
+  }
+
+  function createNodeView(node) {
+    const view = new PIXI.Container();
+    const circle = new PIXI.Graphics();
+
+    view.addChild(circle);
+    view.eventMode = 'static';
+    view.cursor = 'pointer';
+    view.hitArea = new PIXI.Circle(0, 0, node.radius + 8);
+    view._nodeId = node.id;
+    view._circle = circle;
+
+    view.on('pointerdown', e => {
+      e.stopPropagation();
+      state.draggingNode = node;
+      const p = state.world.toLocal(e.global);
+      node.fx = node.x;
+      node.fy = node.y;
+      node._dragOffsetX = node.x - p.x;
+      node._dragOffsetY = node.y - p.y;
+      if (state.simulation) state.simulation.alphaTarget(0.22).restart();
+    });
+
+    view.on('pointertap', e => {
+      e.stopPropagation();
+      focusNode(node.id);
+    });
+
+    view.on('pointerover', () => {
+      state.hoveredId = node.id;
+      styleNodeView(node);
+      state.hoverLabel.text = node.name;
+      state.hoverLabel.visible = true;
+    });
+
+    view.on('pointerout', () => {
+      if (state.hoveredId === node.id) state.hoveredId = null;
+      styleNodeView(node);
+      state.hoverLabel.visible = false;
+    });
+
+    styleNodeView(node);
+    return view;
+  }
+
+  function styleNodeView(node) {
+    const view = state.nodeViews.get(node.id);
+    if (!view) return;
+
+    const selected = state.focusedId === node.id;
+    const hovered = state.hoveredId === node.id;
+    const related = !state.focusedId || state.viewMode === 'local' || isDirectNeighbor(node.id);
+    const circle = view._circle;
+
+    circle.clear();
+
+    if (selected) circle.lineStyle(2.3, 0xb8adff, 1);
+    else if (hovered) circle.lineStyle(1.8, 0x9c8df4, 1);
+    else circle.lineStyle(0.8, 0x161616, 0.95);
+
+    circle.beginFill(TYPE_COLORS[node.type], selected || hovered ? 1 : 0.88);
+    circle.drawCircle(0, 0, selected ? node.radius + 2.2 : node.radius);
+    circle.endFill();
+
+    view.alpha = related ? 1 : 0.1;
+  }
+
+  function isDirectNeighbor(id) {
+    if (!state.focusedId) return true;
+    if (id === state.focusedId) return true;
+
+    return (state.outAdj.get(state.focusedId) || []).some(e => e.target === id) ||
+      (state.inAdj.get(state.focusedId) || []).some(e => e.source === id);
+  }
+
+  function shouldShowStaticLabel(node) {
+    if (state.viewMode === 'local') return state.visibleNodes.length <= 160 || node.degree >= 3;
+    if (state.visibleNodes.length <= 170) return true;
+    return node.degree >= 9;
+  }
+
+  function createStaticLabel(node) {
+    const label = new PIXI.Text(node.name, {
+      fontFamily: 'Inter, system-ui, sans-serif',
+      fontSize: 9.5,
+      fill: 0xbebebe,
+      stroke: 0x1e1e1e,
+      strokeThickness: 3
+    });
+    label.anchor.set(0.5, 0);
+    label.eventMode = 'none';
+    state.labelLayer.addChild(label);
+    state.staticLabels.set(node.id, label);
+  }
+
+  function rebuildScene() {
+    for (const child of state.nodeLayer.removeChildren()) child.destroy({ children: true });
+    for (const child of state.labelLayer.removeChildren()) child.destroy();
+    state.nodeViews.clear();
+    state.staticLabels.clear();
+
+    for (const node of state.visibleNodes) {
+      const view = createNodeView(node);
+      state.nodeViews.set(node.id, view);
+      state.nodeLayer.addChild(view);
+
+      if (shouldShowStaticLabel(node)) createStaticLabel(node);
+    }
+
+    state.focusLabel.visible = Boolean(state.focusedId && state.byId.has(state.focusedId));
+    updateAllNodeStyles();
+    rebuildSimulation();
+    renderFrame();
+  }
+
+  function rebuildSimulation() {
+    if (state.simulation) state.simulation.stop();
+
+    state.simEdges = state.visibleEdges.map(edge => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      relation: edge.relation,
+      provenance: edge.provenance
+    }));
+
+    const linkForce = d3.forceLink(state.simEdges)
+      .id(d => d.id)
+      .distance(state.settings.distance)
+      .strength(state.settings.link);
+
+    state.simulation = d3.forceSimulation(state.visibleNodes)
+      .force('link', linkForce)
+      .force('charge', d3.forceManyBody().strength(-state.settings.repel).distanceMax(650))
+      .force('x', d3.forceX(0).strength(state.settings.center))
+      .force('y', d3.forceY(0).strength(state.settings.center))
+      .force('collide', d3.forceCollide(d => d.radius + 4).strength(0.7).iterations(1))
+      .velocityDecay(0.34)
+      .alphaDecay(0.024)
+      .alphaMin(0.002)
+      .alpha(0.9)
+      .restart();
+
+    $('physics-badge').classList.add('active');
+  }
+
+  function updatePhysics() {
+    state.settings.center = Number($('center-force').value) / 1000;
+    state.settings.repel = Number($('repel-force').value);
+    state.settings.link = Number($('link-force').value) / 100;
+    state.settings.distance = Number($('link-distance').value);
+
+    if (!state.simulation) return;
+
+    state.simulation.force('charge').strength(-state.settings.repel);
+    state.simulation.force('x').strength(state.settings.center);
+    state.simulation.force('y').strength(state.settings.center);
+
+    const link = state.simulation.force('link');
+    link.distance(state.settings.distance).strength(state.settings.link);
+
+    state.simulation.alpha(0.72).restart();
+    $('physics-badge').classList.add('active');
+  }
+
+  function restructureGraph() {
+    for (const node of state.visibleNodes) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 45 + Math.random() * 260;
+      node.x = Math.cos(angle) * distance;
+      node.y = Math.sin(angle) * distance;
+      node.vx = (Math.random() - 0.5) * 5;
+      node.vy = (Math.random() - 0.5) * 5;
+
+      if (!$('pin-dragged').checked) {
+        node.fx = null;
+        node.fy = null;
       }
-    });
+    }
 
-    state.cy.on('tap', 'node', evt => focusNode(evt.target.id()));
-    state.cy.on('tap', evt => {
-      if (evt.target === state.cy && state.viewMode === 'global') clearFocus();
-    });
+    if (state.simulation) state.simulation.alpha(1).restart();
+    $('physics-badge').classList.add('active');
+  }
 
-    state.cy.on('mouseover', 'node', evt => evt.target.addClass('hovered'));
-    state.cy.on('mouseout', 'node', evt => evt.target.removeClass('hovered'));
+  function renderFrame() {
+    if (!state.edgeLayer || !state.world) return;
+
+    drawEdges();
+
+    for (const node of state.visibleNodes) {
+      const view = state.nodeViews.get(node.id);
+      if (view) view.position.set(node.x || 0, node.y || 0);
+
+      const label = state.staticLabels.get(node.id);
+      if (label) {
+        label.position.set(node.x || 0, (node.y || 0) + node.radius + 4);
+        label.alpha = !state.focusedId || state.viewMode === 'local' || isDirectNeighbor(node.id) ? 0.9 : 0.08;
+        label.visible = state.world.scale.x >= 0.38 || state.viewMode === 'local';
+      }
+    }
+
+    if (state.hoveredId) {
+      const node = state.byId.get(state.hoveredId);
+      if (node) state.hoverLabel.position.set(node.x || 0, (node.y || 0) + node.radius + 6);
+    }
+
+    if (state.focusedId) {
+      const node = state.byId.get(state.focusedId);
+      if (node && state.nodeViews.has(node.id)) {
+        state.focusLabel.text = node.name;
+        state.focusLabel.position.set(node.x || 0, (node.y || 0) + node.radius + 7);
+        state.focusLabel.visible = !state.staticLabels.has(node.id);
+      } else {
+        state.focusLabel.visible = false;
+      }
+    } else {
+      state.focusLabel.visible = false;
+    }
+
+    if (state.simulation) {
+      const active = state.simulation.alpha() > 0.015 || Boolean(state.draggingNode);
+      $('physics-badge').classList.toggle('active', active);
+    }
+  }
+
+  function drawEdges() {
+    state.edgeLayer.clear();
+
+    for (const edge of state.simEdges) {
+      const source = edge.source;
+      const target = edge.target;
+      if (!source || !target || !Number.isFinite(source.x) || !Number.isFinite(target.x)) continue;
+
+      let color = 0x505050;
+      let alpha = edge.provenance === 'description' ? 0.16 : 0.26;
+      let width = 0.75;
+
+      if (edge.provenance === 'curated') {
+        color = 0x8978ef;
+        alpha = 0.66;
+        width = 1.3;
+      } else if (edge.provenance === 'explicit') {
+        color = 0x777777;
+        alpha = 0.38;
+      }
+
+      if (state.focusedId && state.viewMode === 'global') {
+        const touches = source.id === state.focusedId || target.id === state.focusedId;
+        alpha = touches ? Math.max(alpha, 0.76) : 0.025;
+        width = touches ? Math.max(width, 1.15) : 0.55;
+      }
+
+      state.edgeLayer.lineStyle(width, color, alpha);
+      state.edgeLayer.moveTo(source.x, source.y);
+      state.edgeLayer.lineTo(target.x, target.y);
+    }
+  }
+
+  function onStagePointerDown(e) {
+    if (state.draggingNode) return;
+    state.panning = true;
+    state.panStart = { x: e.global.x, y: e.global.y };
+    state.worldStart = { x: state.world.position.x, y: state.world.position.y };
+  }
+
+  function onStagePointerMove(e) {
+    if (state.draggingNode) {
+      const p = state.world.toLocal(e.global);
+      state.draggingNode.fx = p.x + (state.draggingNode._dragOffsetX || 0);
+      state.draggingNode.fy = p.y + (state.draggingNode._dragOffsetY || 0);
+      return;
+    }
+
+    if (state.panning && state.panStart && state.worldStart) {
+      state.world.position.set(
+        state.worldStart.x + (e.global.x - state.panStart.x),
+        state.worldStart.y + (e.global.y - state.panStart.y)
+      );
+    }
+  }
+
+  function onStagePointerUp() {
+    if (state.draggingNode) {
+      if (!$('pin-dragged').checked) {
+        state.draggingNode.fx = null;
+        state.draggingNode.fy = null;
+      }
+
+      state.draggingNode._dragOffsetX = 0;
+      state.draggingNode._dragOffsetY = 0;
+      state.draggingNode = null;
+
+      if (state.simulation) state.simulation.alphaTarget(0);
+    }
+
+    state.panning = false;
+    state.panStart = null;
+    state.worldStart = null;
+  }
+
+  function onWheel(e) {
+    e.preventDefault();
+
+    const rect = state.pixi.view.getBoundingClientRect();
+    const point = new PIXI.Point(e.clientX - rect.left, e.clientY - rect.top);
+    const oldScale = state.world.scale.x;
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    const newScale = Math.max(0.12, Math.min(3.2, oldScale * factor));
+
+    const worldX = (point.x - state.world.position.x) / oldScale;
+    const worldY = (point.y - state.world.position.y) / oldScale;
+
+    state.world.scale.set(newScale);
+    state.world.position.set(
+      point.x - worldX * newScale,
+      point.y - worldY * newScale
+    );
+  }
+
+  function zoomBy(factor) {
+    const point = new PIXI.Point(state.pixi.screen.width / 2, state.pixi.screen.height / 2);
+    const oldScale = state.world.scale.x;
+    const newScale = Math.max(0.12, Math.min(3.2, oldScale * factor));
+    const worldX = (point.x - state.world.position.x) / oldScale;
+    const worldY = (point.y - state.world.position.y) / oldScale;
+
+    state.world.scale.set(newScale);
+    state.world.position.set(
+      point.x - worldX * newScale,
+      point.y - worldY * newScale
+    );
+  }
+
+  function fitGraph() {
+    if (!state.visibleNodes.length || !state.pixi) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    for (const node of state.visibleNodes) {
+      minX = Math.min(minX, node.x || 0);
+      minY = Math.min(minY, node.y || 0);
+      maxX = Math.max(maxX, node.x || 0);
+      maxY = Math.max(maxY, node.y || 0);
+    }
+
+    const width = Math.max(140, maxX - minX);
+    const height = Math.max(140, maxY - minY);
+    const padding = state.viewMode === 'local' ? 110 : 75;
+    const scale = Math.max(0.12, Math.min(2.3,
+      Math.min(
+        state.pixi.screen.width / (width + padding * 2),
+        state.pixi.screen.height / (height + padding * 2)
+      )
+    ));
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    state.world.scale.set(scale);
+    state.world.position.set(
+      state.pixi.screen.width / 2 - centerX * scale,
+      state.pixi.screen.height / 2 - centerY * scale
+    );
   }
 
   function renderTypeFilters() {
@@ -411,7 +752,7 @@
       input.addEventListener('change', () => {
         if (input.checked) state.visibleTypes.add(input.dataset.type);
         else state.visibleTypes.delete(input.dataset.type);
-        applyFilters();
+        applyFilters(true);
       });
     });
   }
@@ -419,13 +760,14 @@
   function renderLegend() {
     $('legend-items').innerHTML = Object.entries(TYPE_LABELS).map(([type, label]) =>
       '<div class="legend-row"><span class="legend-left"><span class="legend-dot" style="background:' +
-      TYPE_COLORS[type] + '"></span>' + label + '</span></div>'
+      TYPE_CSS[type] + '"></span>' + label + '</span></div>'
     ).join('');
   }
 
   function optionize(el, values, formatter) {
     formatter = formatter || (v => v);
     const first = el.options[0].outerHTML;
+
     el.innerHTML = first + values
       .filter(Boolean)
       .sort((a, b) => String(a).localeCompare(String(b)))
@@ -451,8 +793,14 @@
     optionize($('cost-filter'), costs, v => v === -1 ? 'X' : v);
 
     ['search-input', 'color-filter', 'rarity-filter', 'card-type-filter', 'cost-filter', 'isolated-filter', 'incoming-filter', 'outgoing-filter'].forEach(id => {
-      $(id).addEventListener(id === 'search-input' ? 'input' : 'change', applyFilters);
+      $(id).addEventListener(id === 'search-input' ? 'input' : 'change', () => applyFilters(true));
     });
+
+    ['center-force', 'repel-force', 'link-force', 'link-distance'].forEach(id => {
+      $(id).addEventListener('input', updatePhysics);
+    });
+
+    $('reheat-graph').addEventListener('click', restructureGraph);
 
     $('global-mode').addEventListener('click', () => setViewMode('global'));
     $('local-mode').addEventListener('click', () => setViewMode('local'));
@@ -461,23 +809,15 @@
       button.addEventListener('click', () => {
         state.depth = Number(button.dataset.depth);
         document.querySelectorAll('.depth-button').forEach(b => b.classList.toggle('active', b === button));
-        if (state.viewMode === 'local') applyFilters();
+        if (state.viewMode === 'local') applyFilters(true);
       });
     });
 
     $('reset-filters').addEventListener('click', resetFilters);
     $('clear-focus').addEventListener('click', clearFocus);
-    $('fit-graph').addEventListener('click', () => state.cy.fit(state.cy.elements(':visible'), 55));
-
-    $('zoom-in').addEventListener('click', () => state.cy.zoom({
-      level: Math.min(state.cy.zoom() * 1.18, 2.8),
-      renderedPosition: { x: $('graph-stage').clientWidth / 2, y: $('graph-stage').clientHeight / 2 }
-    }));
-
-    $('zoom-out').addEventListener('click', () => state.cy.zoom({
-      level: Math.max(state.cy.zoom() / 1.18, 0.12),
-      renderedPosition: { x: $('graph-stage').clientWidth / 2, y: $('graph-stage').clientHeight / 2 }
-    }));
+    $('fit-graph').addEventListener('click', fitGraph);
+    $('zoom-in').addEventListener('click', () => zoomBy(1.18));
+    $('zoom-out').addEventListener('click', () => zoomBy(1 / 1.18));
 
     $('filters-toggle').addEventListener('click', () => $('filters-panel').classList.add('open'));
     $('filters-close').addEventListener('click', () => $('filters-panel').classList.remove('open'));
@@ -493,6 +833,7 @@
 
     document.addEventListener('keydown', e => {
       const ctrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k';
+
       if (ctrlK) {
         e.preventDefault();
         openPalette();
@@ -517,26 +858,26 @@
     $('local-mode').classList.toggle('active', mode === 'local');
     $('depth-controls').classList.toggle('disabled', mode !== 'local');
     $('selection-hint').classList.toggle('hidden', !(mode === 'local' && !state.focusedId));
-    applyFilters();
+    applyFilters(true);
   }
 
-  function matchesFilters(n) {
-    if (!state.visibleTypes.has(n.type)) return false;
+  function matchesFilters(node) {
+    if (!state.visibleTypes.has(node.type)) return false;
 
     const q = norm($('search-input').value);
-    if (q && !(norm(n.name).includes(q) || norm(n.description).includes(q))) return false;
+    if (q && !(norm(node.name).includes(q) || norm(node.description).includes(q))) return false;
 
     const color = $('color-filter').value;
-    if (color !== 'all' && n.color !== color) return false;
+    if (color !== 'all' && node.color !== color) return false;
 
     const rarity = $('rarity-filter').value;
-    if (rarity !== 'all' && n.rarity !== rarity) return false;
+    if (rarity !== 'all' && node.rarity !== rarity) return false;
 
     const cardType = $('card-type-filter').value;
-    if (cardType !== 'all' && (n.type !== 'card' || n.cardType !== cardType)) return false;
+    if (cardType !== 'all' && (node.type !== 'card' || node.cardType !== cardType)) return false;
 
     const cost = $('cost-filter').value;
-    if (cost !== 'all' && (n.type !== 'card' || String(n.cost) !== cost)) return false;
+    if (cost !== 'all' && (node.type !== 'card' || String(node.cost) !== cost)) return false;
 
     return true;
   }
@@ -579,9 +920,7 @@
     return found;
   }
 
-  function applyFilters() {
-    if (!state.cy) return;
-
+  function applyFilters(shouldFit) {
     const baseAllowed = new Set(state.nodes.filter(matchesFilters).map(n => n.id));
     let visible = new Set(baseAllowed);
 
@@ -589,129 +928,101 @@
       visible = collectLocal(state.focusedId, baseAllowed);
     }
 
-    const visibleEdges = state.edges.filter(e => visible.has(e.source) && visible.has(e.target));
+    let visibleEdges = state.edges.filter(e => visible.has(e.source) && visible.has(e.target));
 
     if ($('isolated-filter').checked && !$('search-input').value && state.viewMode === 'global') {
       const connected = new Set();
+
       for (const edge of visibleEdges) {
         connected.add(edge.source);
         connected.add(edge.target);
       }
+
       visible = new Set([...visible].filter(id => connected.has(id) || id === state.focusedId));
+      visibleEdges = state.edges.filter(e => visible.has(e.source) && visible.has(e.target));
     }
 
-    state.cy.batch(() => {
-      state.cy.nodes().forEach(node => {
-        node.style('display', visible.has(node.id()) ? 'element' : 'none');
-      });
+    state.visibleNodes = [...visible].map(id => state.byId.get(id)).filter(Boolean);
+    state.visibleEdges = visibleEdges;
 
-      state.cy.edges().forEach(edge => {
-        const show = visible.has(edge.source().id()) && visible.has(edge.target().id());
-        edge.style('display', show ? 'element' : 'none');
-      });
-    });
+    rebuildScene();
 
-    if (state.viewMode === 'global') applyGlobalFocusClasses();
-    else applyLocalFocusClasses();
-
-    const nodeCount = state.cy.nodes(':visible').length;
-    const edgeCount = state.cy.edges(':visible').length;
     const modeLabel = state.viewMode === 'local' ? 'local · depth ' + state.depth : 'global';
-    $('graph-summary').textContent = modeLabel + ' · ' + nodeCount + ' nodes · ' + edgeCount + ' links';
+    $('graph-summary').textContent = modeLabel + ' · ' + state.visibleNodes.length + ' nodes · ' + state.visibleEdges.length + ' links';
     $('selection-hint').classList.toggle('hidden', !(state.viewMode === 'local' && !state.focusedId));
 
-    scheduleRelayout();
+    if (shouldFit) setTimeout(fitGraph, 160);
   }
 
-  function applyGlobalFocusClasses() {
-    state.cy.elements().removeClass('dimmed neighbor focused');
-
-    if (!state.focusedId) return;
-
-    const node = state.cy.getElementById(state.focusedId);
-    if (!node || node.empty() || node.style('display') === 'none') return;
-
-    state.cy.elements(':visible').addClass('dimmed');
-    const hood = node.closedNeighborhood(':visible');
-    hood.removeClass('dimmed').addClass('neighbor');
-    node.addClass('focused');
-  }
-
-  function applyLocalFocusClasses() {
-    state.cy.elements().removeClass('dimmed neighbor focused');
-    if (!state.focusedId) return;
-
-    state.cy.nodes(':visible').addClass('neighbor');
-    state.cy.edges(':visible').addClass('neighbor');
-
-    const node = state.cy.getElementById(state.focusedId);
-    if (node && !node.empty()) node.addClass('focused');
-  }
-
-  function scheduleRelayout() {
-    clearTimeout(state.layoutTimer);
-    state.layoutTimer = setTimeout(relayout, 90);
-  }
-
-  function relayout() {
-    const visible = state.cy.elements(':visible');
-    const count = state.cy.nodes(':visible').length;
-    if (!count) return;
-
-    const local = state.viewMode === 'local' && state.focusedId;
-    const layout = {
-      name: 'cose',
-      animate: false,
-      fit: true,
-      padding: local ? 85 : 55,
-      randomize: false,
-      componentSpacing: local ? 70 : 46,
-      nodeRepulsion: local ? 8500 : 6100,
-      idealEdgeLength: local ? 105 : 72,
-      edgeElasticity: 0.12,
-      gravity: local ? 0.32 : 0.11,
-      numIter: count > 350 ? 180 : 320
-    };
-
-    try {
-      visible.layout(layout).run();
-    } catch (err) {
-      console.warn(err);
-    }
+  function updateAllNodeStyles() {
+    for (const node of state.visibleNodes) styleNodeView(node);
   }
 
   function focusNode(id) {
-    const node = state.cy.getElementById(id);
-    if (!node || node.empty()) return;
+    const node = state.byId.get(id);
+    if (!node) return;
 
     state.focusedId = id;
     $('clear-focus').disabled = false;
     renderInspector(id);
 
     if (state.viewMode === 'local') {
-      applyFilters();
+      applyFilters(true);
     } else {
-      applyGlobalFocusClasses();
-      const hood = node.closedNeighborhood(':visible');
-      state.cy.animate({ fit: { eles: hood, padding: 90 }, duration: 180 });
+      updateAllNodeStyles();
+      setTimeout(() => fitNeighborhood(id), 20);
     }
 
     if (window.innerWidth <= 900) $('inspector-panel').classList.add('open');
   }
 
+  function fitNeighborhood(id) {
+    const ids = new Set([id]);
+
+    for (const edge of state.outAdj.get(id) || []) ids.add(edge.target);
+    for (const edge of state.inAdj.get(id) || []) ids.add(edge.source);
+
+    const nodes = [...ids].map(nodeIdValue => state.byId.get(nodeIdValue)).filter(node => node && state.nodeViews.has(node.id));
+    if (!nodes.length) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const node of nodes) {
+      minX = Math.min(minX, node.x || 0);
+      minY = Math.min(minY, node.y || 0);
+      maxX = Math.max(maxX, node.x || 0);
+      maxY = Math.max(maxY, node.y || 0);
+    }
+
+    const width = Math.max(90, maxX - minX);
+    const height = Math.max(90, maxY - minY);
+    const scale = Math.max(0.2, Math.min(2.2,
+      Math.min(
+        state.pixi.screen.width / (width + 220),
+        state.pixi.screen.height / (height + 220)
+      )
+    ));
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    state.world.scale.set(scale);
+    state.world.position.set(
+      state.pixi.screen.width / 2 - centerX * scale,
+      state.pixi.screen.height / 2 - centerY * scale
+    );
+  }
+
   function clearFocus() {
     state.focusedId = null;
-    if (!state.cy) return;
-
     $('clear-focus').disabled = true;
-    state.cy.elements().removeClass('dimmed neighbor focused');
 
     $('entity-card').classList.add('hidden');
     $('inspector-empty').classList.remove('hidden');
     $('note-path').textContent = 'No note selected';
     $('note-panel-title').textContent = 'Reading view';
 
-    applyFilters();
+    if (state.viewMode === 'local') applyFilters(true);
+    else updateAllNodeStyles();
   }
 
   function relationRow(edge, node, direction) {
@@ -720,44 +1031,44 @@
       edge.provenance === 'name-match' ? 'matched' : 'text';
 
     return '<div class="relation" data-target="' + htmlEsc(node.id) + '">' +
-      '<span class="relation-dot" style="background:' + TYPE_COLORS[node.type] + '"></span>' +
+      '<span class="relation-dot" style="background:' + TYPE_CSS[node.type] + '"></span>' +
       '<div><div class="relation-name">' + htmlEsc(node.name) + '</div>' +
       '<div class="relation-type">' + htmlEsc(direction + ' · ' + edge.relation) +
-      ' · <span class="relation-provenance">' + provenance + '</span></div></div></div>';
+      ' · <span class="relation-provenance">' + htmlEsc(provenance) + '</span></div></div></div>';
   }
 
   function renderInspector(id) {
-    const n = state.nodes.find(x => x.id === id);
-    if (!n) return;
+    const node = state.byId.get(id);
+    if (!node) return;
 
     $('inspector-empty').classList.add('hidden');
     $('entity-card').classList.remove('hidden');
 
-    $('note-path').textContent = TYPE_FOLDERS[n.type] + ' / ' + n.name + '.md';
+    $('note-path').textContent = TYPE_FOLDERS[node.type] + ' / ' + node.name + '.md';
     $('note-panel-title').textContent = 'Reading view';
-    $('entity-kicker').textContent = TYPE_LABELS[n.type].replace(/s$/, '');
-    $('entity-name').textContent = n.name;
+    $('entity-kicker').textContent = TYPE_LABELS[node.type].replace(/s$/, '');
+    $('entity-name').textContent = node.name;
 
     const chips = [
-      n.color,
-      n.rarity,
-      n.cardType,
-      n.cost !== undefined && n.type === 'card' ? (n.cost === -1 ? 'X cost' : n.cost + ' cost') : '',
-      n.degree ? n.degree + ' links' : ''
+      node.color,
+      node.rarity,
+      node.cardType,
+      node.cost !== undefined && node.type === 'card' ? (node.cost === -1 ? 'X cost' : node.cost + ' cost') : '',
+      node.degree ? node.degree + ' links' : ''
     ].filter(Boolean);
 
     $('entity-meta').innerHTML = chips.map(c => '<span class="chip">' + htmlEsc(c) + '</span>').join('');
-    $('entity-description').textContent = n.description || 'No description available.';
+    $('entity-description').textContent = node.description || 'No description available.';
 
     const outgoing = (state.outAdj.get(id) || []).map(edge => ({
       edge,
-      node: state.nodes.find(x => x.id === edge.target)
-    })).filter(x => x.node);
+      node: state.byId.get(edge.target)
+    })).filter(item => item.node);
 
     const incoming = (state.inAdj.get(id) || []).map(edge => ({
       edge,
-      node: state.nodes.find(x => x.id === edge.source)
-    })).filter(x => x.node);
+      node: state.byId.get(edge.source)
+    })).filter(item => item.node);
 
     $('outgoing-count').textContent = outgoing.length;
     $('backlinks-count').textContent = incoming.length;
@@ -785,10 +1096,17 @@
     $('incoming-filter').checked = true;
     $('outgoing-filter').checked = true;
 
+    $('center-force').value = 12;
+    $('repel-force').value = 170;
+    $('link-force').value = 28;
+    $('link-distance').value = 92;
+    $('pin-dragged').checked = false;
+
     state.visibleTypes = new Set(Object.keys(TYPE_LABELS));
     $('type-filters').querySelectorAll('input').forEach(i => i.checked = true);
 
-    applyFilters();
+    updatePhysics();
+    applyFilters(true);
   }
 
   function openPalette() {
@@ -807,7 +1125,7 @@
     const q = norm($('palette-input').value);
 
     state.paletteMatches = state.nodes
-      .filter(n => !q || norm(n.name).includes(q) || norm(n.description).includes(q))
+      .filter(node => !q || norm(node.name).includes(q) || norm(node.description).includes(q))
       .sort((a, b) => {
         const aExact = q && norm(a.name) === q ? 1 : 0;
         const bExact = q && norm(b.name) === q ? 1 : 0;
@@ -824,11 +1142,11 @@
     state.paletteIndex = Math.min(state.paletteIndex, Math.max(0, state.paletteMatches.length - 1));
 
     $('palette-results').innerHTML = state.paletteMatches.length
-      ? state.paletteMatches.map((n, index) =>
-          '<div class="palette-result' + (index === state.paletteIndex ? ' active' : '') + '" data-id="' + htmlEsc(n.id) + '">' +
-          '<span class="palette-result-dot" style="background:' + TYPE_COLORS[n.type] + '"></span>' +
-          '<span class="palette-result-name">' + htmlEsc(n.name) + '</span>' +
-          '<span class="palette-result-meta">' + htmlEsc(TYPE_LABELS[n.type].replace(/s$/, '')) + '</span></div>'
+      ? state.paletteMatches.map((node, index) =>
+          '<div class="palette-result' + (index === state.paletteIndex ? ' active' : '') + '" data-id="' + htmlEsc(node.id) + '">' +
+          '<span class="palette-result-dot" style="background:' + TYPE_CSS[node.type] + '"></span>' +
+          '<span class="palette-result-name">' + htmlEsc(node.name) + '</span>' +
+          '<span class="palette-result-meta">' + htmlEsc(TYPE_LABELS[node.type].replace(/s$/, '')) + '</span></div>'
         ).join('')
       : '<div class="empty-links">No matching notes.</div>';
 
@@ -859,18 +1177,21 @@
   function openPaletteResult(id) {
     closePalette();
 
-    const nodeData = state.nodes.find(n => n.id === id);
-    if (!nodeData) return;
+    const node = state.byId.get(id);
+    if (!node) return;
 
-    if (!matchesFilters(nodeData)) {
+    if (!matchesFilters(node)) {
       $('search-input').value = '';
       $('color-filter').value = 'all';
       $('rarity-filter').value = 'all';
       $('card-type-filter').value = 'all';
       $('cost-filter').value = 'all';
-      state.visibleTypes.add(nodeData.type);
-      const typeBox = $('type-filters').querySelector('input[data-type="' + nodeData.type + '"]');
+
+      state.visibleTypes.add(node.type);
+      const typeBox = $('type-filters').querySelector('input[data-type="' + node.type + '"]');
       if (typeBox) typeBox.checked = true;
+
+      applyFilters(false);
     }
 
     focusNode(id);
@@ -889,9 +1210,11 @@
       state.edges = buildEdges(state.nodes, manualLinks);
       buildAdjacency();
 
-      initGraph();
+      initPixi();
       setupControls();
-      setViewMode('global');
+      applyFilters(false);
+
+      setTimeout(fitGraph, 500);
 
       $('loading-state').classList.add('hidden');
       $('dataset-status').classList.add('ready');
