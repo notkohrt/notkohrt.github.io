@@ -609,17 +609,29 @@
     view.on('pointerdown', e => {
       e.stopPropagation();
       if (state.touchPointers.size >= 2) return;
+
       state.draggingNode = node;
+      node._dragMoved = false;
+      node._pointerStartX = e.global.x;
+      node._pointerStartY = e.global.y;
+
       const p = state.world.toLocal(e.global);
       node.fx = node.x;
       node.fy = node.y;
       node._dragOffsetX = node.x - p.x;
       node._dragOffsetY = node.y - p.y;
+
       if (state.simulation) state.simulation.alphaTarget(0.22).restart();
     });
 
     view.on('pointertap', e => {
       e.stopPropagation();
+
+      if (node._dragMoved) {
+        node._dragMoved = false;
+        return;
+      }
+
       if (state.focusedId === node.id) clearFocus();
       else focusNode(node.id);
     });
@@ -867,9 +879,15 @@
     if (state.touchPointers.size >= 2) return;
 
     if (state.draggingNode) {
+      const node = state.draggingNode;
+      const dx = e.global.x - (node._pointerStartX || e.global.x);
+      const dy = e.global.y - (node._pointerStartY || e.global.y);
+
+      if (Math.hypot(dx, dy) > 6) node._dragMoved = true;
+
       const p = state.world.toLocal(e.global);
-      state.draggingNode.fx = p.x + (state.draggingNode._dragOffsetX || 0);
-      state.draggingNode.fy = p.y + (state.draggingNode._dragOffsetY || 0);
+      node.fx = p.x + (node._dragOffsetX || 0);
+      node.fy = p.y + (node._dragOffsetY || 0);
       return;
     }
 
@@ -897,6 +915,8 @@
 
       state.draggingNode._dragOffsetX = 0;
       state.draggingNode._dragOffsetY = 0;
+      state.draggingNode._pointerStartX = null;
+      state.draggingNode._pointerStartY = null;
       state.draggingNode = null;
 
       if (state.simulation) state.simulation.alphaTarget(0);
