@@ -59,8 +59,9 @@
   };
 
   const EFFECT_DEFS = [
-    { id:'DRAW', name:'Draw', description:'Draw cards from the Draw Pile into the Hand.', patterns:[/\bdraw(?:s|n)?\b/i], relation:'draws' },
-    { id:'DISCARD', name:'Discard', description:'Move cards from the Hand to the Discard Pile.', patterns:[/\bdiscard(?:s|ed|ing)?\b/i], relation:'discards' },
+    { id:'DRAW', name:'Draw', description:'Draw cards from the Draw Pile into the Hand.', patterns:[/\bdraw(?:s|n)?\b(?!\s+pile)/i], relation:'draws' },
+    { id:'DISCARD', name:'Discard', description:'Move cards from the Hand to the Discard Pile.', patterns:[/\bdiscard(?:s|ed|ing)?\b(?!\s+pile)/i], relation:'discards' },
+    { id:'PLAY_CARD', name:'Play Card', description:'Play cards from the Hand or by another effect.', patterns:[/\bplay(?:s|ed|ing)?\b/i], relation:'plays cards' },
     { id:'DAMAGE', name:'Damage', description:'Deal or take combat damage.', patterns:[/\bdeal(?:s)?\b[^.\n]*\bdamage\b/i,/\btake(?:s)?\b[^.\n]*\bdamage\b/i], relation:'deals / takes damage' },
     { id:'HEAL', name:'Heal', description:'Restore Hit Points.', patterns:[/\bheal(?:s|ed|ing)?\b/i], relation:'heals' },
     { id:'LOSE_HP', name:'Lose HP', description:'Lose Hit Points directly.', patterns:[/\blose(?:s)?\b[^.\n]*\bHP\b/i], relation:'loses HP' },
@@ -340,6 +341,8 @@
 
     if (/\b(?:add|create|shuffle|put)\b[^.\n]{0,42}$/.test(clauseBefore)) return 'creates';
     if (/\btransform\b[^.\n]{0,34}$/.test(clauseBefore)) return 'transforms';
+    if (/\bremove\b[^.\n]{0,34}$/.test(clauseBefore)) return 'removes';
+    if (/\b(?:lose|loses|reduce|reduces)\b[^.\n]{0,34}$/.test(clauseBefore)) return 'reduces';
     if (/\b(?:apply|inflict)\b[^.\n]{0,30}$/.test(clauseBefore)) return 'applies';
     if (/\bequal to\b[^.\n]{0,24}$/.test(clauseBefore)) return 'scales with';
     if (/\bgain\b[^.\n]{0,28}$/.test(clauseBefore)) return 'grants';
@@ -385,6 +388,17 @@
       return 'draws';
     }
 
+    if (effectId === 'PLAY_CARD') {
+      if (/\b(?:whenever|when|each time)\b[^.\n]{0,52}\bplay(?:s|ed|ing)?\b/.test(t)) return 'triggers on card play';
+      if (/\bfirst\b[^.\n]{0,34}\bplay(?:s|ed|ing)?\b/.test(t)) return 'triggers on card play';
+      if (/\bfor each\b[^.\n]{0,46}\bplayed\b/.test(t)) return 'scales with cards played';
+      if (/\bplayed\s+an\s+(?:extra|additional)\s+time\b/.test(t)) return 'repeats card play';
+      if (/\bnext\b[^.\n]{0,36}\b(?:skill|attack|card)\b[^.\n]{0,30}\bplay(?:ed)?\b/.test(t)) return 'modifies next card play';
+      if (/\bfree\s+to\s+play\b/.test(t)) return 'modifies card play';
+      if (/\b(?:can only|cannot|can't|may not)\b[^.\n]{0,28}\bplayed?\b/.test(t)) return 'restricts card play';
+      return 'plays cards';
+    }
+
     if (effectId === 'DAMAGE') {
       if (/\b(?:additional|double|more|less)\s+damage\b|\bdamage\b[^.\n]{0,28}\b(?:increased|reduced|doubled)\b/.test(t)) return 'modifies damage';
       if (/\btake(?:s)?\b[^.\n]{0,28}\bdamage\b/.test(t)) return 'takes damage';
@@ -393,6 +407,72 @@
 
     return fallback;
   }
+
+  function inferPowerRelation(card, powerNode) {
+    const text = card.description || '';
+    const name = powerNode.name || '';
+    const relations = inferRelations(text, name);
+
+    if (relations.includes('removes')) return 'removes';
+    if (relations.includes('reduces')) return 'reduces';
+    if (relations.includes('applies')) return 'applies';
+    if (relations.includes('grants')) return 'grants';
+
+    return powerNode.rarity === 'Debuff' ? 'applies' : 'grants';
+  }
+
+  function inferKeywordRelation(text, keywordName) {
+    const t = norm(text);
+    const k = norm(keywordName);
+
+    if (k === 'exhaust' && /\bexhaust\s+pile\b/.test(t) && !/\bexhaust(?:s|ed|ing)?\b(?!\s+pile)/.test(t)) {
+      return null;
+    }
+
+    if (k === 'sly' && /\b(?:add|gain|gains)\b[^.\n]{0,36}\bsly\b/.test(t)) return 'grants';
+    if (k === 'retain' && /\b(?:gain|gains|retain)\b[^.\n]{0,36}\bretain\b|\bretain\b[^.\n]{0,24}\bcard/.test(t)) return 'grants';
+
+    const relation = inferRelation(text, keywordName);
+    return relation === 'references' ? 'uses keyword' : relation;
+  }
+
+  function addPileRelations(source, text, pushEdge) {
+    if (/\bdraw\s+pile\b/i.test(text)) {
+      const relation = /(?:no cards|empty)[^.\n]{0,28}\bdraw\s+pile\b|\bdraw\s+pile\b[^.\n]{0,28}(?:empty|no cards)/i.test(text)
+        ? 'requires empty'
+        : 'references pile';
+      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), relation, 'derived');
+    }
+
+    if (/\bdiscard\s+pile\b/i.test(text)) {
+      pushEdge(source.id, nodeId('mechanic','DISCARD_PILE'), 'references pile', 'derived');
+    }
+
+    if (/\bexhaust\s+pile\b/i.test(text)) {
+      const relation = /\bplay\b[^.\n]{0,42}\bexhaust\s+pile\b/i.test(text) ? 'plays from' : 'references pile';
+      pushEdge(source.id, nodeId('mechanic','EXHAUST_PILE'), relation, 'derived');
+    }
+  }
+
+  const SILENT_SEMANTIC_OVERRIDES = [
+    ['card:BLADE_OF_INK', 'card:SHIV', ['creates']],
+    ['card:BLADE_OF_INK', 'enchantment:INKY', ['creates with enchantment']],
+    ['card:HAND_TRICK', 'keyword:SLY', ['grants']],
+    ['card:MASTER_PLANNER', 'keyword:SLY', ['grants']],
+    ['card:WELL_LAID_PLANS', 'keyword:RETAIN', ['grants']],
+    ['card:MALAISE', 'power:STRENGTH_POWER', ['reduces']],
+    ['card:PIERCING_WAIL', 'power:STRENGTH_POWER', ['reduces']],
+    ['card:WRAITH_FORM', 'power:DEXTERITY_POWER', ['reduces']],
+    ['card:EXPOSE', 'power:ARTIFACT_POWER', ['removes']],
+    ['card:EXPOSE', 'mechanic:BLOCK', ['removes']],
+    ['card:BLUR', 'mechanic:BLOCK', ['retains']],
+    ['card:SHADOWMELD', 'mechanic:BLOCK', ['modifies']],
+    ['card:GRAND_FINALE', 'mechanic:DRAW_PILE', ['requires empty']],
+    ['card:KNIFE_TRAP', 'mechanic:EXHAUST_PILE', ['plays from']],
+    ['card:ENVENOM', 'effect:DAMAGE', ['triggers on damage']],
+    ['card:STORM_OF_STEEL', 'effect:DISCARD', ['discards', 'scales with discard']],
+    ['card:BURST', 'mechanic:REPLAY', ['grants']]
+  ];
 
   function buildEdges(nodes, manualLinks, cardPowers) {
     const edges = [];
@@ -448,7 +528,7 @@
         const target = nodeId('power', power.id);
         const powerNode = byId.get(target);
         if (powerNode) {
-          pushEdge(card.id, target, powerNode.rarity === 'Debuff' ? 'applies' : 'grants', 'explicit');
+          pushEdge(card.id, target, inferPowerRelation(card, powerNode), 'explicit');
         }
       }
     }
@@ -461,7 +541,7 @@
         if (target.id === source.id) continue;
         if (containsEntityName(text, target.name)) {
           for (const relation of inferRelations(text, target.name)) {
-            const provenance = ['creates','transforms','applies','scales with','grants','plays','discards','exhausts','requires','triggers','triggers on','modifies'].includes(relation)
+            const provenance = ['creates','transforms','removes','reduces','applies','scales with','grants','plays','discards','exhausts','requires','triggers','triggers on','modifies'].includes(relation)
               ? 'derived'
               : 'description';
             pushEdge(source.id, target.id, relation, provenance);
@@ -471,15 +551,19 @@
 
       for (const keyword of keywords) {
         if (containsEntityName(text, keyword.name)) {
-          const relation = inferRelation(text, keyword.name);
-          pushEdge(
-            source.id,
-            keyword.id,
-            relation === 'references' ? 'uses keyword' : relation,
-            relation === 'references' ? 'description' : 'derived'
-          );
+          const relation = inferKeywordRelation(text, keyword.name);
+          if (relation) {
+            pushEdge(
+              source.id,
+              keyword.id,
+              relation,
+              relation === 'uses keyword' ? 'description' : 'derived'
+            );
+          }
         }
       }
+
+      addPileRelations(source, text, pushEdge);
 
       for (const [effectId, effect] of effects) {
         if (effect.patterns.some(pattern => pattern.test(text))) {
@@ -497,6 +581,9 @@
       const hp = byId.get(nodeId('mechanic','HIT_POINTS'));
 
       if (block && /\bgain(?:s)?\b[^.\n]*\bBlock\b/i.test(text)) pushEdge(source.id, block.id, 'grants', 'derived');
+      if (block && /\bremove\b[^.\n]{0,42}\bBlock\b/i.test(text)) pushEdge(source.id, block.id, 'removes', 'derived');
+      if (block && /\bBlock\s+gain\b/i.test(text)) pushEdge(source.id, block.id, 'modifies', 'derived');
+      if (block && /\bBlock\s+is\s+not\s+removed\b/i.test(text)) pushEdge(source.id, block.id, 'retains', 'derived');
       if (energy && /\bgain(?:s)?\b[^.\n]*(?:\[E\]|Energy)/i.test(text)) pushEdge(source.id, energy.id, 'grants', 'derived');
       if (energy && /\blose(?:s)?\b[^.\n]*(?:\[E\]|Energy)/i.test(text)) pushEdge(source.id, energy.id, 'consumes', 'derived');
       if (hp && /\bheal(?:s|ed|ing)?\b/i.test(text)) pushEdge(source.id, hp.id, 'restores', 'derived');
@@ -524,6 +611,20 @@
           pushEdge(card.id, power.id, 'grants', 'name-match');
         }
       }
+    }
+
+    for (const [source, target, relations] of SILENT_SEMANTIC_OVERRIDES) {
+      if (!byId.has(source) || !byId.has(target)) continue;
+
+      for (let i = edges.length - 1; i >= 0; i -= 1) {
+        const edge = edges[i];
+        if (edge.source === source && edge.target === target) {
+          edgeIds.delete(edge.id);
+          edges.splice(i, 1);
+        }
+      }
+
+      for (const relation of relations) pushEdge(source, target, relation, 'curated');
     }
 
     for (const link of manualLinks || []) {
