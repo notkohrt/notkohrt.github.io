@@ -248,6 +248,32 @@ function inferRelation(text, targetName) {
   return inferRelations(text, targetName)[0] || 'references';
 }
 
+function inferEffectRelation(effectId, text, fallback) {
+  const t = norm(text);
+
+  if (effectId === 'DISCARD') {
+    if (/\b(?:whenever|when|each time)\b[^.\n]{0,48}\bdiscard(?:s|ed|ing)?\b/.test(t)) return 'triggers on discard';
+    if (/\bfor each\b[^.\n]{0,42}\bdiscarded\b/.test(t)) return 'scales with discard';
+    if (/\bif\b[^.\n]{0,42}\bdiscarded\b/.test(t)) return 'benefits from discard';
+    return 'discards';
+  }
+
+  if (effectId === 'DRAW') {
+    if (/\b(?:whenever|when|each time|every\s+\d+\s+cards?)\b[^.\n]{0,52}\bdraw(?:s|n)?\b/.test(t)) return 'triggers on draw';
+    if (/\bfor each\b[^.\n]{0,42}\bdrawn\b/.test(t)) return 'scales with draw';
+    if (/\b(?:cannot|may not)\s+draw\b|\bdraw\s+\d+\s+fewer\b/.test(t)) return 'modifies draw';
+    return 'draws';
+  }
+
+  if (effectId === 'DAMAGE') {
+    if (/\b(?:additional|double|more|less)\s+damage\b|\bdamage\b[^.\n]{0,28}\b(?:increased|reduced|doubled)\b/.test(t)) return 'modifies damage';
+    if (/\btake(?:s)?\b[^.\n]{0,28}\bdamage\b/.test(t)) return 'takes damage';
+    if (/\bdeal(?:s)?\b[^.\n]{0,34}\bdamage\b/.test(t)) return 'deals damage';
+  }
+
+  return fallback;
+}
+
 function buildDetectedEdges(nodes, cardPowers) {
   const byId = new Map(nodes.map(n => [n.id, n]));
   const cards = nodes.filter(n => n.type === 'card');
@@ -325,7 +351,12 @@ function buildDetectedEdges(nodes, cardPowers) {
 
     for (const [effectId, effect] of effects) {
       if (effect.patterns.some(pattern => pattern.test(source.description || ''))) {
-        push(source.id, nodeId('effect', effectId), effect.relation, 'derived');
+        push(
+          source.id,
+          nodeId('effect', effectId),
+          inferEffectRelation(effectId, source.description || '', effect.relation),
+          'derived'
+        );
       }
     }
 
