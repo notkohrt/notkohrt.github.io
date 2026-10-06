@@ -385,6 +385,15 @@ const IRONCLAD_SEMANTIC_OVERRIDES = [
   ['card:COLOSSUS', 'power:VULNERABLE_POWER', ['requires']],
   ['card:CRUELTY', 'power:VULNERABLE_POWER', ['modifies damage vs']],
   ['card:VICIOUS', 'power:VULNERABLE_POWER', ['triggers on application']],
+  ['card:COLOSSUS', 'effect:DAMAGE', ['reduces incoming damage vs Vulnerable']],
+  ['card:CRUELTY', 'effect:DAMAGE', ['increases damage vs Vulnerable']],
+  ['card:BATTLE_TRANCE', 'effect:DRAW', ['draws', 'modifies draw']],
+  ['card:HELLRAISER', 'effect:DRAW', ['triggers on draw']],
+  ['card:HELLRAISER', 'effect:PLAY_CARD', ['plays drawn cards']],
+  ['card:JUGGERNAUT', 'mechanic:BLOCK', ['triggers on']],
+  ['card:UNMOVABLE', 'mechanic:BLOCK', ['modifies']],
+  ['card:FIGHT_ME', 'power:STRENGTH_POWER', ['grants to self & enemy']],
+  ['card:MANGLE', 'power:STRENGTH_POWER', ['reduces']],
   ['card:RUPTURE', 'effect:LOSE_HP', ['triggers on HP loss']],
   ['card:INFERNO', 'effect:LOSE_HP', ['loses HP', 'triggers on HP loss']],
   ['card:SPITE', 'effect:LOSE_HP', ['requires HP loss']],
@@ -411,7 +420,9 @@ const IRONCLAD_SEMANTIC_OVERRIDES = [
   ['relic:RED_SKULL', 'mechanic:HIT_POINTS', ['requires low HP']],
   ['relic:RED_SKULL', 'power:STRENGTH_POWER', ['grants']],
   ['relic:RUINED_HELMET', 'power:STRENGTH_POWER', ['modifies']],
-  ['relic:PAPER_PHROG', 'power:VULNERABLE_POWER', ['modifies']]
+  ['relic:PAPER_PHROG', 'power:VULNERABLE_POWER', ['modifies']],
+  ['relic:PAPER_PHROG', 'effect:DAMAGE', ['increases damage vs Vulnerable']],
+  ['relic:BRIMSTONE', 'power:STRENGTH_POWER', ['grants to self & enemies']]
 ];
 
 function buildDetectedEdges(nodes, cardPowers) {
