@@ -992,7 +992,15 @@
     renderLegend();
 
     optionize($('color-filter'), [...new Set(state.nodes.map(n => n.color).filter(Boolean))]);
-    optionize($('rarity-filter'), [...new Set(state.nodes.map(n => n.rarity).filter(Boolean))]);
+    optionize(
+      $('rarity-filter'),
+      [...new Set(
+        state.nodes
+          .filter(n => ['card', 'relic', 'potion', 'enchantment'].includes(n.type))
+          .map(n => n.rarity)
+          .filter(Boolean)
+      )]
+    );
     optionize($('card-type-filter'), [...new Set(state.nodes.filter(n => n.type === 'card').map(n => n.cardType).filter(Boolean))]);
 
     const costs = [...new Set(
@@ -1080,16 +1088,21 @@
     if (q && !(norm(node.name).includes(q) || norm(node.description).includes(q))) return false;
 
     const color = $('color-filter').value;
-    if (color !== 'all' && node.color !== color) return false;
+    if (color !== 'all') {
+      const universalColors = new Set(['shared', 'colorless', 'status', 'curse', 'token', 'event', 'quest']);
+      if (node.color && node.color !== color && !universalColors.has(node.color)) return false;
+    }
 
     const rarity = $('rarity-filter').value;
-    if (rarity !== 'all' && node.rarity !== rarity) return false;
+    if (rarity !== 'all' && ['card', 'relic', 'potion', 'enchantment'].includes(node.type)) {
+      if (node.rarity !== rarity) return false;
+    }
 
     const cardType = $('card-type-filter').value;
-    if (cardType !== 'all' && (node.type !== 'card' || node.cardType !== cardType)) return false;
+    if (cardType !== 'all' && node.type === 'card' && node.cardType !== cardType) return false;
 
     const cost = $('cost-filter').value;
-    if (cost !== 'all' && (node.type !== 'card' || String(node.cost) !== cost)) return false;
+    if (cost !== 'all' && node.type === 'card' && String(node.cost) !== cost) return false;
 
     return true;
   }
@@ -1152,6 +1165,16 @@
 
       visible = new Set([...visible].filter(id => connected.has(id) || id === state.focusedId));
       visibleEdges = state.edges.filter(e => visible.has(e.source) && visible.has(e.target));
+    }
+
+    if (state.focusedId && !visible.has(state.focusedId)) {
+      state.focusedId = null;
+      $('clear-focus').disabled = true;
+      $('entity-card').classList.add('hidden');
+      $('inspector-empty').classList.remove('hidden');
+      $('note-path').textContent = 'No note selected';
+      $('note-panel-title').textContent = 'Reading view';
+      $('inspector-panel').classList.remove('open');
     }
 
     state.visibleNodes = [...visible].map(id => state.byId.get(id)).filter(Boolean);
