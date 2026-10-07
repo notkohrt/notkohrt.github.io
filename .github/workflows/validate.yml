@@ -30,3 +30,16 @@ jobs:
         run: node --check scripts/validate-graph.mjs
       - name: Validate graph data and semantic endpoints
         run: node scripts/validate-graph.mjs
+      - name: Build Obsidian vault
+        run: node scripts/build-vault.mjs
+      - name: Verify generated vault
+        run: |
+          test -f "vault/Start Here.md"
+          test -f "vault/README.md"
+          test "$(find vault -type f -name '*.md' | wc -l)" -gt 500
+      - name: Upload Obsidian vault
+        uses: actions/upload-artifact@v4
+        with:
+          name: sts2-bubble-obsidian-vault
+          path: vault/
+          if-no-files-found: error
