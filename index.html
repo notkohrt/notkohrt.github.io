@@ -22,7 +22,7 @@
   <meta name="twitter:description" content="An interactive Slay the Spire 2 knowledge graph.">
   <meta name="twitter:image" content="https://notkohrt.pro/docs/assets/sts2-neow.webp">
 
-  <link rel="stylesheet" href="./styles.css?v=20261007-2">
+  <link rel="stylesheet" href="./styles.css?v=20261007-3">
 </head>
 <body>
   <div class="app-shell">
@@ -37,20 +37,20 @@
 
       <div class="view-controls" aria-label="Graph view controls">
         <div class="segmented">
-          <button class="segment active" id="global-mode" type="button">Global</button>
-          <button class="segment" id="local-mode" type="button">Local</button>
+          <button class="segment active" id="global-mode" type="button" aria-pressed="true">Global</button>
+          <button class="segment" id="local-mode" type="button" aria-pressed="false">Local</button>
         </div>
         <div class="depth-controls disabled" id="depth-controls" aria-label="Local graph depth">
           <span>Depth</span>
-          <button class="depth-button active" data-depth="1" type="button">1</button>
-          <button class="depth-button" data-depth="2" type="button">2</button>
-          <button class="depth-button" data-depth="3" type="button">3</button>
+          <button class="depth-button active" data-depth="1" type="button" aria-pressed="true" disabled>1</button>
+          <button class="depth-button" data-depth="2" type="button" aria-pressed="false" disabled>2</button>
+          <button class="depth-button" data-depth="3" type="button" aria-pressed="false" disabled>3</button>
         </div>
       </div>
 
       <div class="topbar-actions">
-        <button class="ghost-button mobile-only" id="filters-toggle" type="button">Controls</button>
-        <button class="command-button" id="command-button" type="button">
+        <button class="ghost-button mobile-only" id="filters-toggle" type="button" aria-controls="filters-panel" aria-expanded="false">Controls</button>
+        <button class="command-button" id="command-button" type="button" aria-label="Find a note" aria-haspopup="dialog" aria-controls="command-palette">
           <span>Quick switcher</span>
           <kbd>Ctrl K</kbd>
         </button>
@@ -58,7 +58,7 @@
           <span class="status-dot"></span>
           <span>Loading…</span>
         </div>
-        <button class="ghost-button mobile-only" id="inspector-toggle" type="button">Note</button>
+        <button class="ghost-button mobile-only" id="inspector-toggle" type="button" aria-controls="inspector-panel" aria-expanded="false">Note</button>
       </div>
     </header>
 
@@ -171,7 +171,7 @@
     </aside>
 
     <main class="graph-stage" id="graph-stage">
-      <div id="graph-canvas" aria-label="Interactive Slay the Spire 2 relationship graph"></div>
+      <div id="graph-canvas" role="img" aria-label="Interactive Slay the Spire 2 relationship graph. Use Find a note to navigate with a keyboard."></div>
 
       <div class="graph-toolbar">
         <button class="icon-button" id="fit-graph" type="button" title="Fit graph" aria-label="Fit graph">◎</button>
@@ -207,7 +207,7 @@
 
       <article class="entity-card hidden" id="entity-card">
         <div class="entity-kicker" id="entity-kicker"></div>
-        <h2 id="entity-name"></h2>
+        <h2 id="entity-name" tabindex="-1"></h2>
         <div class="entity-meta" id="entity-meta"></div>
         <div class="entity-description" id="entity-description"></div>
 
@@ -237,13 +237,13 @@
   </div>
 
   <div class="palette-backdrop hidden" id="palette-backdrop" role="presentation">
-    <div class="command-palette" role="dialog" aria-modal="true" aria-label="Quick switcher">
+    <div class="command-palette" id="command-palette" role="dialog" aria-modal="true" aria-label="Quick switcher">
       <div class="palette-input-wrap">
         <span>⌕</span>
-        <input id="palette-input" type="search" autocomplete="off" placeholder="Open a card, relic, power…">
-        <kbd>Esc</kbd>
+        <input id="palette-input" type="search" role="combobox" aria-label="Find a note" aria-autocomplete="list" aria-controls="palette-results" aria-expanded="false" autocomplete="off" placeholder="Open a card, relic, power…">
+        <button class="icon-button" id="palette-close" type="button" aria-label="Close quick switcher">×</button>
       </div>
-      <div class="palette-results" id="palette-results"></div>
+      <div class="palette-results" id="palette-results" role="listbox" aria-label="Matching notes"></div>
       <div class="palette-footer">Enter to open · ↑↓ to navigate</div>
     </div>
   </div>
@@ -251,6 +251,6 @@
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" defer></script>
   <script src="https://spire-codex.com/widget/spire-codex-tooltip.js" defer></script>
-  <script src="./app.js?v=20261007-2" defer></script>
+  <script src="./app.js?v=20261007-3" type="module"></script>
 </body>
 </html>

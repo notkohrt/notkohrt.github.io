@@ -14,6 +14,9 @@ The generated entity notes are created by:
 - `Potions/`
 - `Enchantments/`
 - `Keywords/`
+- `Mechanics/`
+- `Tags/`
+- `Effects/`
 
 Each note contains game metadata, detected links, and a **Curated relationships** block.
 
@@ -40,5 +43,7 @@ Examples:
 ```
 
 When the generator runs, those curated links are exported to `data/manual-links.json`. The public graph loads that file and renders curated edges distinctly from relationships inferred from game text.
+
+Use a specific mechanical relationship and an existing target path. Bare `references`, `related`, and `synergizes` links are rejected, and unknown targets stop generation before any authored notes are rewritten.
 
 The generated sections can be rebuilt whenever STS2 changes. The curated block is the human-authored layer.

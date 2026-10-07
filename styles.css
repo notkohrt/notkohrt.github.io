@@ -6,6 +6,7 @@
 }
 *{box-sizing:border-box}
 html,body{height:100%}
+:focus-visible{outline:2px solid var(--accent-line);outline-offset:3px}
 body{margin:0;background:var(--bg);color:var(--text);font:13px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
 button,input,select{font:inherit}
 button{color:inherit}
@@ -15,6 +16,7 @@ a:hover{text-decoration:underline}
 
 .app-shell{
   height:100vh;
+  height:100dvh;
   display:grid;
   grid-template-columns:var(--sidebar) minmax(0,1fr) var(--inspector);
   grid-template-rows:48px minmax(0,1fr) 27px;
@@ -150,7 +152,9 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
 .relations-header{display:flex;align-items:center;justify-content:space-between;margin:14px 0 5px}
 .relations-header h3{font-size:10px;text-transform:uppercase;letter-spacing:.075em;margin:0;color:#939393}
 .relations-header span{font-size:9.5px;color:#696969}
-.relation{display:grid;grid-template-columns:7px minmax(0,1fr);gap:8px;padding:7px 5px;border-radius:5px;cursor:pointer}
+.relation{display:grid;grid-template-columns:7px minmax(0,1fr);gap:8px;padding:7px 5px;border:0;background:transparent;width:100%;text-align:left;border-radius:5px;cursor:pointer}
+.relation-name,.relation-type{display:block}
+.relations-more{width:100%;margin-top:6px;min-height:36px}
 .relation:hover{background:#292929}
 .relation-dot{width:6px;height:6px;border-radius:50%;margin-top:5px}
 .relation-name{font-size:11px;color:#c9c9c9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -194,7 +198,20 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
 }
 @media(max-width:560px){
   .brand-subtitle{display:none}.brand-title{display:none}.view-controls{gap:6px}.segment{padding:0 9px}
-  .command-button{display:none}
+  .command-button{display:flex;min-width:40px;min-height:36px;justify-content:center}
+  .command-button:before{content:"Find";font-size:11px}
+  .command-button kbd{display:none}
+  .topbar-actions{gap:5px;padding:0 6px}
+  .graph-summary{max-width:calc(100% - 24px);bottom:44px}
+}
+
+@media(max-width:900px){
+  .relation,.ghost-button.mobile-only,.icon-button{min-height:40px}
+  .icon-button{min-width:40px}
+}
+@media(prefers-reduced-motion:reduce){
+  .filters-panel,.inspector-panel{transition:none}
+  .loader{animation:none}
 }
 
 .entity-facts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:14px 0 2px}

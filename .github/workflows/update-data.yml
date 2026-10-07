@@ -19,6 +19,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+      - name: Install locked test dependencies
+        run: npm ci --ignore-scripts
 
       - name: Refresh pinned Spire Archive snapshot
         run: node scripts/update-data.mjs
@@ -36,10 +39,8 @@ jobs:
       - name: Validate refreshed graph
         if: steps.diff.outputs.changed == 'true'
         run: |
-          node --check app.js
-          node --check scripts/build-vault.mjs
-          node scripts/validate-graph.mjs
-          node scripts/build-vault.mjs
+          npm run check
+          node scripts/build-vault.mjs --output "$RUNNER_TEMP/sts2-vault"
 
       - name: Open data refresh pull request
         if: steps.diff.outputs.changed == 'true'

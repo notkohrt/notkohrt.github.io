@@ -25,6 +25,5 @@ Prefer specific mechanical verbs:
 - `consumes`
 - `transforms`
 - `moves`
-- `references`
 
-Use `synergizes` only when you intentionally want a strategy/opinion relationship rather than a hard mechanical link.
+Every curated link should explain a concrete mechanic. Bare `references`, `related`, and subjective `synergizes` links are rejected. Unknown targets stop generation before authored notes or exports are rewritten.

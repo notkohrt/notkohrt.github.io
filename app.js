@@ -1,17 +1,6 @@
+import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, createNodePaths } from './lib/graph-model.mjs';
+
 (() => {
-  const SOURCES = {
-    card: '/data/sts2/cards.json',
-    relic: '/data/sts2/relics.json',
-    power: '/data/sts2/powers.json',
-    potion: '/data/sts2/potions.json',
-    enchantment: '/data/sts2/enchantments.json',
-    keyword: '/data/sts2/keywords.json',
-    mechanics: '/data/sts2/mechanics.json',
-    cardPowers: '/data/sts2/card_powers.json'
-  };
-
-  const SOURCE_META_URL = '/data/sts2/meta.json';
-
   const RELATION_FAMILY_LABELS = {
     creation: 'Create / transform',
     application: 'Apply / grant',
@@ -84,57 +73,16 @@
     effect: 'Effects'
   };
 
-  const TYPE_FOLDERS = {
-    card: 'Cards',
-    relic: 'Relics',
-    power: 'Powers',
-    potion: 'Potions',
-    enchantment: 'Enchantments',
-    keyword: 'Keywords',
-    mechanic: 'Mechanics',
-    tag: 'Tags',
-    effect: 'Effects'
-  };
-
-  const CARD_TYPE_MECHANICS = [
-    { id:'CARD_TYPE_ATTACK', name:'Attack Cards', description:'Cards with the Attack type.' },
-    { id:'CARD_TYPE_SKILL', name:'Skill Cards', description:'Cards with the Skill type.' },
-    { id:'CARD_TYPE_POWER', name:'Power Cards', description:'Cards with the Power type.' },
-    { id:'CARD_TYPE_STATUS', name:'Status Cards', description:'Cards with the Status type.' },
-    { id:'CARD_TYPE_COLORLESS', name:'Colorless Cards', description:'Cards from the Colorless pool.' }
-  ];
-
-  const SYSTEM_MECHANICS = [
-    { id:'ORB_SYSTEM', name:'Orbs', description:'The Defect orb system and channeled Orb state.', group:'orbs' },
-    { id:'ORB_SLOTS', name:'Orb Slots', description:'Capacity for Channeled Orbs.', group:'orbs' },
-    { id:'OSTY', name:'Osty', description:'The Necrobinder companion controlled through Summon and Osty-specific cards.', group:'character_mechanics' }
-  ];
-
-  const EFFECT_DEFS = [
-    { id:'DRAW', name:'Draw', description:'Draw cards from the Draw Pile into the Hand.', patterns:[/\bdraw(?:s|n)?\b(?!\s+pile)/i], relation:'draws' },
-    { id:'DISCARD', name:'Discard', description:'Move cards from the Hand to the Discard Pile.', patterns:[/\bdiscard(?:s|ed|ing)?\b(?!\s+pile)/i], relation:'discards' },
-    { id:'EXHAUST_CARD', name:'Exhaust Card', description:'Exhaust a card and move it to the Exhaust Pile.', patterns:[/\bexhaust(?:s|ed|ing)?\b(?!\s+pile)/i], relation:'exhausts cards' },
-    { id:'PLAY_CARD', name:'Play Card', description:'Play cards from the Hand or by another effect.', patterns:[/\bplay(?:s|ed|ing)?\b/i], relation:'plays cards' },
-    { id:'DAMAGE', name:'Damage', description:'Deal or take combat damage.', patterns:[/\bdeal(?:s)?\b[^.\n]*\bdamage\b/i,/\btake(?:s)?\b[^.\n]*\bdamage\b/i], relation:'deals / takes damage' },
-    { id:'HEAL', name:'Heal', description:'Restore Hit Points.', patterns:[/\bheal(?:s|ed|ing)?\b/i], relation:'heals' },
-    { id:'LOSE_HP', name:'Lose HP', description:'Lose Hit Points directly.', patterns:[/\blose(?:s)?\b[^.\n]*\bHP\b/i], relation:'loses HP' },
-    { id:'UPGRADE', name:'Upgrade', description:'Upgrade a card.', patterns:[/\bupgrade(?:s|d|ing)?\b/i], relation:'upgrades' },
-    { id:'TRANSFORM', name:'Transform', description:'Transform one card into another.', patterns:[/\btransform(?:s|ed|ing)?\b/i], relation:'transforms' },
-    { id:'CREATE_CARD', name:'Create Card', description:'Create or add a card during combat.', patterns:[/\bcreate(?:s|d|ing)?\b[^.\n]*\bcard/i,/\badd\b[^.\n]*\b(?:card|shiv|status|curse|attack|skill|power)\b[^.\n]*\b(?:hand|pile|deck)\b/i], relation:'creates' },
-    { id:'SHUFFLE', name:'Shuffle', description:'Shuffle cards or a pile.', patterns:[/\bshuffle(?:s|d|ing)?\b/i], relation:'shuffles' },
-    { id:'CHANNEL', name:'Channel', description:'Channel an Orb.', patterns:[/\bchannel(?:s|ed|ing)?\b/i], relation:'channels' },
-    { id:'EVOKE', name:'Evoke', description:'Evoke an Orb.', patterns:[/\bevoke(?:s|d|ing)?\b/i], relation:'evokes' },
-    { id:'COST_CHANGE', name:'Cost Modification', description:'Change the Energy cost of a card.', patterns:[/\bcost(?:s)?\b[^.\n]*(?:less|more|0|zero)/i,/\bfree to play\b/i], relation:'modifies cost' }
-  ];
-
   const state = {
     nodes: [],
     edges: [],
     byId: new Map(),
+    nodePaths: new Map(),
     outAdj: new Map(),
     inAdj: new Map(),
 
     pixi: null,
+    renderPending: null,
     world: null,
     edgeLayer: null,
     nodeLayer: null,
@@ -161,6 +109,9 @@
 
     paletteIndex: 0,
     paletteMatches: [],
+    paletteReturnFocus: null,
+    inspectorId: null,
+    inspectorLimits: { outgoing: 50, incoming: 50 },
 
     draggingNode: null,
     panning: false,
@@ -181,8 +132,6 @@
 
   const $ = id => document.getElementById(id);
   const norm = s => String(s == null ? '' : s).toLowerCase().trim();
-  const slug = s => String(s == null ? '' : s).replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').toUpperCase();
-  const nodeId = (type, id) => type + ':' + id;
   const htmlEsc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -193,912 +142,6 @@
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to load ' + url);
     return res.json();
-  }
-
-  async function loadOptionalJson(url, fallback) {
-    try {
-      return await loadJson(url);
-    } catch (_) {
-      return fallback;
-    }
-  }
-
-  function normalizeData(raw) {
-    const nodes = [];
-
-    for (const card of raw.card) {
-      nodes.push({
-        id: nodeId('card', card.id),
-        sourceId: card.id,
-        type: 'card',
-        name: card.name,
-        description: card.description || '',
-        color: card.color || 'unknown',
-        rarity: card.rarity || '',
-        cardType: card.type || '',
-        cost: card.cost,
-        keywords: card.keywords || [],
-        tags: card.tags || [],
-        target: card.target || '',
-        vars: card.vars || {},
-        upgrade: card.upgrade || {},
-        imageUrl: card.image_url || ''
-      });
-    }
-
-    for (const relic of raw.relic) {
-      nodes.push({
-        id: nodeId('relic', relic.id),
-        sourceId: relic.id,
-        type: 'relic',
-        name: relic.name,
-        description: relic.description || '',
-        color: relic.color || 'shared',
-        rarity: relic.tier || ''
-      });
-    }
-
-    for (const power of raw.power) {
-      nodes.push({
-        id: nodeId('power', power.id),
-        sourceId: power.id,
-        type: 'power',
-        name: power.name,
-        description: power.description || '',
-        rarity: power.type || '',
-        stackable: power.stackable
-      });
-    }
-
-    for (const potion of raw.potion) {
-      nodes.push({
-        id: nodeId('potion', potion.id),
-        sourceId: potion.id,
-        type: 'potion',
-        name: potion.name,
-        description: potion.description || '',
-        rarity: potion.rarity || '',
-        color: potion.color || '',
-        target: potion.target || ''
-      });
-    }
-
-    for (const ench of raw.enchantment) {
-      nodes.push({
-        id: nodeId('enchantment', ench.id),
-        sourceId: ench.id,
-        type: 'enchantment',
-        name: ench.name,
-        description: ench.description || '',
-        rarity: ench.rarity || ''
-      });
-    }
-
-    for (const kw of raw.keyword) {
-      nodes.push({
-        id: nodeId('keyword', kw.id),
-        sourceId: kw.id,
-        type: 'keyword',
-        name: (kw.names && kw.names[0]) || kw.id,
-        description: kw.description || ''
-      });
-    }
-
-    const mechanicGroups = ['core_concepts', 'orbs', 'character_mechanics'];
-    for (const group of mechanicGroups) {
-      for (const item of (raw.mechanics && raw.mechanics[group]) || []) {
-        const name = String(item.title || item.name || item.id || '')
-          .replace(/\s*\([^)]*\)\s*$/, '')
-          .trim();
-        nodes.push({
-          id: nodeId('mechanic', item.id || slug(name)),
-          sourceId: item.id || slug(name),
-          type: 'mechanic',
-          name,
-          description: item.description || '',
-          mechanicGroup: group
-        });
-      }
-    }
-
-    for (const item of SYSTEM_MECHANICS) {
-      nodes.push({
-        id: nodeId('mechanic', item.id),
-        sourceId: item.id,
-        type: 'mechanic',
-        name: item.name,
-        description: item.description,
-        mechanicGroup: item.group,
-        systemDerived: true
-      });
-    }
-
-    for (const item of CARD_TYPE_MECHANICS) {
-      nodes.push({
-        id: nodeId('mechanic', item.id),
-        sourceId: item.id,
-        type: 'mechanic',
-        name: item.name,
-        description: item.description,
-        mechanicGroup: 'card_types',
-        systemDerived: true
-      });
-    }
-
-    const tags = new Set();
-    for (const card of raw.card) {
-      for (const tag of card.tags || []) tags.add(tag);
-    }
-    for (const tag of tags) {
-      nodes.push({
-        id: nodeId('tag', slug(tag)),
-        sourceId: slug(tag),
-        type: 'tag',
-        name: tag,
-        description: 'Card tag used by Slay the Spire 2.'
-      });
-    }
-
-    for (const effect of EFFECT_DEFS) {
-      nodes.push({
-        id: nodeId('effect', effect.id),
-        sourceId: effect.id,
-        type: 'effect',
-        name: effect.name,
-        description: effect.description,
-        systemDerived: true
-      });
-    }
-
-    return nodes;
-  }
-
-  function entityAliases(name) {
-    const base = norm(name).replace(/[{}]/g, '').trim();
-    if (!base) return [];
-
-    const aliases = new Set([base]);
-
-    if (!base.endsWith('s')) aliases.add(base + 's');
-    if (/[^aeiou]y$/.test(base)) aliases.add(base.slice(0, -1) + 'ies');
-    if (/(?:s|x|z|ch|sh)$/.test(base)) aliases.add(base + 'es');
-
-    return [...aliases].sort((a, b) => b.length - a.length);
-  }
-
-  function findEntityMentions(text, name) {
-    const hay = norm(text).replace(/[{}]/g, '');
-    if (!hay) return [];
-
-    const found = [];
-
-    for (const alias of entityAliases(name)) {
-      let from = 0;
-
-      while (from < hay.length) {
-        const at = hay.indexOf(alias, from);
-        if (at === -1) break;
-
-        const before = at === 0 ? '' : hay[at - 1];
-        const afterPos = at + alias.length;
-        const after = afterPos >= hay.length ? '' : hay[afterPos];
-        const word = /[a-z0-9]/;
-
-        if ((!before || !word.test(before)) && (!after || !word.test(after))) {
-          found.push({ index: at, alias });
-        }
-
-        from = at + alias.length;
-      }
-    }
-
-    return found
-      .sort((a, b) => a.index - b.index || b.alias.length - a.alias.length)
-      .filter((item, index, items) =>
-        index === 0 || item.index !== items[index - 1].index
-      );
-  }
-
-  function findEntityMention(text, name) {
-    return findEntityMentions(text, name)[0] || null;
-  }
-
-  function containsEntityName(text, name) {
-    return Boolean(findEntityMention(text, name));
-  }
-
-  function inferRelationAt(text, mention) {
-    const t = norm(text).replace(/[{}]/g, '');
-    const before = t.slice(Math.max(0, mention.index - 72), mention.index);
-    const after = t.slice(mention.index + mention.alias.length, mention.index + mention.alias.length + 72);
-    const clauseBefore = before.split(/[.\n]/).pop() || before;
-    const clauseAfter = after.split(/[.\n]/)[0] || after;
-
-    if (/\b(?:whenever|when|each time|first time|if|every\s+\d+\s+times)\b/.test(clauseBefore) &&
-        /\b(?:play|apply|draw|discard|exhaust|gain|lose|create|deal)\b/.test(clauseBefore)) {
-      return 'triggers on';
-    }
-
-    if (/\b(?:add|create|shuffle|put)\b[^.\n]{0,42}$/.test(clauseBefore)) return 'creates';
-    if (/\btransform\b[^.\n]{0,34}$/.test(clauseBefore)) return 'transforms';
-    if (/\bremove\b[^.\n]{0,34}$/.test(clauseBefore)) return 'removes';
-    if (/\b(?:lose|loses|reduce|reduces)\b[^.\n]{0,34}$/.test(clauseBefore)) return 'reduces';
-    if (/\b(?:apply|inflict)\b[^.\n]{0,30}$/.test(clauseBefore)) return 'applies';
-    if (/\bequal to\b[^.\n]{0,24}$/.test(clauseBefore)) return 'scales with';
-    if (/\b(?:gain|give)\b[^.\n]{0,34}$/.test(clauseBefore)) return 'grants';
-    if (/\bfor each\b[^.\n]{0,46}$/.test(clauseBefore)) return 'scales with';
-    if (/\bdouble\b[^.\n]{0,30}$/.test(clauseBefore)) return 'modifies';
-    if (/\bif\b[^.\n]{0,52}$/.test(clauseBefore)) return 'requires';
-    if (/\b(?:play|plays|played|playing)\b[^.\n]{0,26}$/.test(clauseBefore)) return 'plays';
-    if (/\bdiscard(?:s|ed|ing)?\b[^.\n]{0,26}$/.test(clauseBefore)) return 'discards';
-    if (/\bexhaust(?:s|ed|ing)?\b[^.\n]{0,26}$/.test(clauseBefore)) return 'exhausts';
-
-    if (/^\s*(?:is\s+)?triggered\b/.test(clauseAfter)) return 'triggers';
-    if (/^\s*(?:(?:enemies|creatures|cards|shivs?)\s+)?(?:now\s+)?(?:deal|deals|gain|gains|take|takes|cost|costs|hit|hits|reduce|reduces|increase|increases)\b/.test(clauseAfter)) {
-      return 'modifies';
-    }
-    if (/\bwith\b[^.\n]{0,14}$/.test(clauseBefore) && /\b(?:deal|deals|take|takes|damage|more|less|double)\b/.test(clauseAfter)) {
-      return 'modifies';
-    }
-    if (/\b(?:has|have|with|requires?)\b[^.\n]{0,22}$/.test(clauseBefore)) return 'requires';
-
-    if (/\b(?:additional|double|more|less|increase|reduce|damage)\b/.test(clauseAfter)) return 'modifies';
-    return 'references';
-  }
-
-  function inferRelations(text, targetName) {
-    return [...new Set(findEntityMentions(text, targetName).map(mention => inferRelationAt(text, mention)))];
-  }
-
-  function inferRelation(text, targetName) {
-    return inferRelations(text, targetName)[0] || 'references';
-  }
-
-  function inferEffectRelation(effectId, text, fallback) {
-    const t = norm(text);
-
-    if (effectId === 'DISCARD') {
-      if (/\b(?:whenever|when|each time)\b[^.\n]{0,48}\bdiscard(?:s|ed|ing)?\b/.test(t)) return 'triggers on discard';
-      if (/\bfor each\b[^.\n]{0,42}\bdiscarded\b/.test(t)) return 'scales with discard';
-      if (/\bif\b[^.\n]{0,42}\bdiscarded\b/.test(t)) return 'benefits from discard';
-      return 'discards';
-    }
-
-    if (effectId === 'DRAW') {
-      if (/\b(?:whenever|when|each time|every\s+\d+\s+cards?)\b[^.\n]{0,52}\bdraw(?:s|n)?\b/.test(t)) return 'triggers on draw';
-      if (/\bfor each\b[^.\n]{0,42}\bdrawn\b/.test(t)) return 'scales with draw';
-      if (/\b(?:cannot|may not)\s+draw\b|\bdraw\s+\d+\s+fewer\b/.test(t)) return 'modifies draw';
-      return 'draws';
-    }
-
-    if (effectId === 'EXHAUST_CARD') {
-      if (/\b(?:whenever|when|each time|first time)\b[^.\n]{0,56}\bexhaust(?:s|ed|ing)?\b/.test(t)) return 'triggers on exhaust';
-      if (/\bfor each\b[^.\n]{0,48}\bexhausted\b/.test(t)) return 'scales with exhaust';
-      if (/\bif\b[^.\n]{0,48}\bexhausted\b/.test(t)) return 'requires exhaust';
-      return 'exhausts cards';
-    }
-
-    if (effectId === 'LOSE_HP') {
-      if (/\b(?:whenever|when|each time|first time)\b[^.\n]{0,56}\b(?:lose|lost)\b[^.\n]{0,24}\bhp\b/.test(t)) return 'triggers on HP loss';
-      if (/\bfor each\b[^.\n]{0,56}\b(?:lose|lost)\b[^.\n]{0,24}\bhp\b/.test(t)) return 'scales with HP loss';
-      if (/\bif\b[^.\n]{0,48}\b(?:lose|lost)\b[^.\n]{0,24}\bhp\b/.test(t)) return 'requires HP loss';
-      return 'loses HP';
-    }
-
-    if (effectId === 'PLAY_CARD') {
-      if (/\b(?:whenever|when|each time)\b[^.\n]{0,52}\bplay(?:s|ed|ing)?\b/.test(t)) return 'triggers on card play';
-      if (/\bfirst\b[^.\n]{0,34}\bplay(?:s|ed|ing)?\b/.test(t)) return 'triggers on card play';
-      if (/\bfor each\b[^.\n]{0,46}\bplayed\b/.test(t)) return 'scales with cards played';
-      if (/\bplayed\s+an\s+(?:extra|additional)\s+time\b/.test(t)) return 'repeats card play';
-      if (/\bnext\b[^.\n]{0,36}\b(?:skill|attack|card)\b[^.\n]{0,30}\bplay(?:ed)?\b/.test(t)) return 'modifies next card play';
-      if (/\bfree\s+to\s+play\b/.test(t)) return 'modifies card play';
-      if (/\b(?:can only|cannot|can't|may not)\b[^.\n]{0,28}\bplayed?\b/.test(t)) return 'restricts card play';
-      return 'plays cards';
-    }
-
-    if (effectId === 'CREATE_CARD') {
-      if (/\b(?:whenever|when|each time|first time)\b[^.\n]{0,52}\bcreate(?:s|d|ing)?\s+(?:a\s+)?card\b/.test(t)) return 'triggers on card creation';
-      if (/\bfor each\b[^.\n]{0,48}\bcard\s+(?:you\s+)?created\b/.test(t)) return 'scales with card creation';
-      if (/\bcopy\s+of\s+this\s+card\b/.test(t)) return 'creates copy of self';
-      if (/\bcopy\b[^.\n]{0,36}\binto\s+your\s+hand\b/.test(t)) return 'creates copy';
-      return fallback;
-    }
-
-    if (effectId === 'DAMAGE') {
-      if (/\b(?:additional|double|more|less)\s+damage\b|\bdamage\b[^.\n]{0,28}\b(?:increased|reduced|doubled)\b/.test(t)) return 'modifies damage';
-      if (/\btake(?:s)?\b[^.\n]{0,28}\bdamage\b/.test(t)) return 'takes damage';
-      if (/\bdeal(?:s)?\b[^.\n]{0,34}\bdamage\b/.test(t)) return 'deals damage';
-    }
-
-    return fallback;
-  }
-
-  function inferPowerRelation(card, powerNode) {
-    const text = card.description || '';
-    const name = powerNode.name || '';
-    const relations = inferRelations(text, name);
-
-    if (relations.includes('removes')) return 'removes';
-    if (relations.includes('reduces')) return 'reduces';
-    if (relations.includes('applies')) return 'applies';
-    if (relations.includes('grants')) return 'grants';
-
-    return powerNode.rarity === 'Debuff' ? 'applies' : 'grants';
-  }
-
-  function inferKeywordRelation(text, keywordName) {
-    const t = norm(text);
-    const k = norm(keywordName);
-
-    if (k === 'exhaust') return null;
-
-    if (k === 'sly' && /\b(?:add|gain|gains)\b[^.\n]{0,36}\bsly\b/.test(t)) return 'grants';
-    if (k === 'retain' && /\b(?:gain|gains|retain)\b[^.\n]{0,36}\bretain\b|\bretain\b[^.\n]{0,24}\bcard/.test(t)) return 'grants';
-
-    const relation = inferRelation(text, keywordName);
-    return relation === 'references' ? 'uses keyword' : relation;
-  }
-
-  function addPileRelations(source, text, pushEdge) {
-    if (/\bdraw\s+pile\b/i.test(text)) {
-      if (/(?:no cards|empty)[^.\n]{0,28}\bdraw\s+pile\b|\bdraw\s+pile\b[^.\n]{0,28}(?:empty|no cards)/i.test(text)) {
-        pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'requires empty', 'derived');
-      }
-    }
-
-    if (/\bfrom\s+(?:your\s+)?discard\s+pile\b[^.\n]{0,52}\b(?:hand|draw\s+pile)\b/i.test(text) ||
-        /\bput\b[^.\n]{0,46}\bdiscard\s+pile\b[^.\n]{0,46}\b(?:hand|draw\s+pile)\b/i.test(text)) {
-      pushEdge(source.id, nodeId('mechanic','DISCARD_PILE'), 'moves from', 'derived');
-    }
-    if (/\bdiscard\s+pile\b[^.\n]{0,60}\bdraw\s+pile\b/i.test(text)) {
-      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'moves to', 'derived');
-    }
-    if (/\bfrom\s+(?:your\s+)?draw\s+pile\b[^.\n]{0,52}\bhand\b/i.test(text) ||
-        /\bput\b[^.\n]{0,46}\bdraw\s+pile\b[^.\n]{0,46}\bhand\b/i.test(text)) {
-      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'moves from', 'derived');
-    }
-    if (/\bfrom\s+(?:your\s+)?hand\b[^.\n]{0,52}\b(?:top of )?(?:your\s+)?draw\s+pile\b/i.test(text) ||
-        /\bput\b[^.\n]{0,38}\bhand\b[^.\n]{0,46}\bdraw\s+pile\b/i.test(text)) {
-      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'moves to', 'derived');
-    }
-    if (/\bplay\b[^.\n]{0,46}\bfrom\s+(?:your\s+)?draw\s+pile\b|\bplay\s+the\s+top\b[^.\n]{0,34}\bdraw\s+pile\b/i.test(text)) {
-      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'plays from', 'derived');
-    }
-
-    if (/\bexhaust\s+pile\b/i.test(text)) {
-      let relation = null;
-      if (/\bplay\b[^.\n]{0,42}\bexhaust\s+pile\b/i.test(text)) relation = 'plays from';
-      else if (/\bfor each\b[^.\n]{0,52}\bexhaust\s+pile\b/i.test(text)) relation = 'scales with pile size';
-      else if (/\bif\b[^.\n]{0,52}\bexhaust\s+pile\b/i.test(text)) relation = 'requires pile state';
-      if (relation) pushEdge(source.id, nodeId('mechanic','EXHAUST_PILE'), relation, 'derived');
-    }
-  }
-
-  const SILENT_SEMANTIC_OVERRIDES = [
-    ['card:BLADE_OF_INK', 'card:SHIV', ['creates']],
-    ['card:BLADE_OF_INK', 'enchantment:INKY', ['creates with enchantment']],
-    ['card:HAND_TRICK', 'keyword:SLY', ['grants']],
-    ['card:MASTER_PLANNER', 'keyword:SLY', ['grants']],
-    ['card:WELL_LAID_PLANS', 'keyword:RETAIN', ['grants']],
-    ['card:MALAISE', 'power:STRENGTH_POWER', ['reduces']],
-    ['card:PIERCING_WAIL', 'power:STRENGTH_POWER', ['reduces']],
-    ['card:WRAITH_FORM', 'power:DEXTERITY_POWER', ['reduces']],
-    ['card:EXPOSE', 'power:ARTIFACT_POWER', ['removes']],
-    ['card:EXPOSE', 'mechanic:BLOCK', ['removes']],
-    ['card:BLUR', 'mechanic:BLOCK', ['retains']],
-    ['card:SHADOWMELD', 'mechanic:BLOCK', ['modifies']],
-    ['card:GRAND_FINALE', 'mechanic:DRAW_PILE', ['requires empty']],
-    ['card:KNIFE_TRAP', 'mechanic:EXHAUST_PILE', ['plays from']],
-    ['card:ENVENOM', 'effect:DAMAGE', ['triggers on damage']],
-    ['card:STORM_OF_STEEL', 'effect:DISCARD', ['discards', 'scales with discard']],
-    ['card:BURST', 'mechanic:REPLAY', ['grants']]
-  ];
-
-  const IRONCLAD_SEMANTIC_OVERRIDES = [
-    ['card:ASHEN_STRIKE', 'mechanic:EXHAUST_PILE', ['scales with pile size']],
-    ['card:BODY_SLAM', 'mechanic:BLOCK', ['scales with']],
-    ['card:BARRICADE', 'mechanic:BLOCK', ['retains']],
-    ['card:BULLY', 'power:VULNERABLE_POWER', ['scales with']],
-    ['card:DISMANTLE', 'power:VULNERABLE_POWER', ['requires']],
-    ['card:DOMINATE', 'power:VULNERABLE_POWER', ['applies', 'scales with']],
-    ['card:MOLTEN_FIST', 'power:VULNERABLE_POWER', ['modifies']],
-    ['card:COLOSSUS', 'power:VULNERABLE_POWER', ['requires']],
-    ['card:CRUELTY', 'power:VULNERABLE_POWER', ['modifies damage vs']],
-    ['card:VICIOUS', 'power:VULNERABLE_POWER', ['triggers on application']],
-    ['card:COLOSSUS', 'effect:DAMAGE', ['reduces incoming damage vs Vulnerable']],
-    ['card:CRUELTY', 'effect:DAMAGE', ['increases damage vs Vulnerable']],
-    ['card:BATTLE_TRANCE', 'effect:DRAW', ['draws', 'modifies draw']],
-    ['card:HELLRAISER', 'effect:DRAW', ['triggers on draw']],
-    ['card:HELLRAISER', 'effect:PLAY_CARD', ['plays drawn cards']],
-    ['card:JUGGERNAUT', 'mechanic:BLOCK', ['triggers on']],
-    ['card:UNMOVABLE', 'mechanic:BLOCK', ['modifies']],
-    ['card:FIGHT_ME', 'power:STRENGTH_POWER', ['grants to self & enemy']],
-    ['card:MANGLE', 'power:STRENGTH_POWER', ['reduces']],
-    ['card:RUPTURE', 'effect:LOSE_HP', ['triggers on HP loss']],
-    ['card:INFERNO', 'effect:LOSE_HP', ['loses HP', 'triggers on HP loss']],
-    ['card:SPITE', 'effect:LOSE_HP', ['requires HP loss']],
-    ['card:TEAR_ASUNDER', 'effect:LOSE_HP', ['scales with HP loss']],
-    ['card:DRUM_OF_BATTLE', 'effect:EXHAUST_CARD', ['triggers on exhaust']],
-    ['card:EVIL_EYE', 'effect:EXHAUST_CARD', ['requires exhaust']],
-    ['card:FEEL_NO_PAIN', 'effect:EXHAUST_CARD', ['triggers on exhaust']],
-    ['card:DARK_EMBRACE', 'effect:EXHAUST_CARD', ['triggers on exhaust']],
-    ['card:FORGOTTEN_RITUAL', 'effect:EXHAUST_CARD', ['requires exhaust']],
-    ['card:FIEND_FIRE', 'effect:EXHAUST_CARD', ['exhausts cards', 'scales with exhaust']],
-    ['card:SECOND_WIND', 'effect:EXHAUST_CARD', ['exhausts cards', 'scales with exhaust']],
-    ['card:STOKE', 'effect:EXHAUST_CARD', ['exhausts cards', 'scales with exhaust']],
-    ['card:CORRUPTION', 'effect:EXHAUST_CARD', ['triggers on card play', 'exhausts cards']],
-    ['card:HAVOC', 'mechanic:DRAW_PILE', ['plays from']],
-    ['card:HEADBUTT', 'mechanic:DISCARD_PILE', ['moves from']],
-    ['card:HEADBUTT', 'mechanic:DRAW_PILE', ['moves to']],
-    ['card:CASCADE', 'mechanic:DRAW_PILE', ['plays from']],
-    ['card:HOWL_FROM_BEYOND', 'mechanic:EXHAUST_PILE', ['plays from']],
-    ['card:PACTS_END', 'mechanic:EXHAUST_PILE', ['requires pile state']],
-    ['card:FEED', 'mechanic:HIT_POINTS', ['increases Max HP']],
-    ['relic:CHARONS_ASHES', 'effect:EXHAUST_CARD', ['triggers on exhaust']],
-    ['relic:DEMON_TONGUE', 'effect:LOSE_HP', ['triggers on HP loss']],
-    ['relic:SELF_FORMING_CLAY', 'effect:LOSE_HP', ['triggers on HP loss']],
-    ['relic:RED_SKULL', 'mechanic:HIT_POINTS', ['requires low HP']],
-    ['relic:RED_SKULL', 'power:STRENGTH_POWER', ['grants']],
-    ['relic:RUINED_HELMET', 'power:STRENGTH_POWER', ['modifies']],
-    ['relic:PAPER_PHROG', 'power:VULNERABLE_POWER', ['modifies']],
-    ['relic:PAPER_PHROG', 'effect:DAMAGE', ['increases damage vs Vulnerable']],
-    ['relic:BRIMSTONE', 'power:STRENGTH_POWER', ['grants to self & enemies']]
-  ];
-
-  const DEFECT_SEMANTIC_OVERRIDES = [
-    ['card:BIASED_COGNITION', 'power:FOCUS_POWER', ['grants', 'reduces over time']],
-    ['relic:DATA_DISK', 'power:FOCUS_POWER', ['grants']],
-    ['card:BULK_UP', 'mechanic:ORB_SLOTS', ['reduces']],
-    ['card:CAPACITOR', 'mechanic:ORB_SLOTS', ['grants']],
-    ['card:MODDED', 'mechanic:ORB_SLOTS', ['grants']],
-    ['relic:RUNIC_CAPACITOR', 'mechanic:ORB_SLOTS', ['grants']],
-    ['card:BARRAGE', 'mechanic:ORB_SYSTEM', ['scales with Channeled Orbs']],
-    ['card:COMPILE_DRIVER', 'mechanic:ORB_SYSTEM', ['scales with unique Orbs']],
-    ['card:COOLANT', 'mechanic:ORB_SYSTEM', ['scales with unique Orbs']],
-    ['card:SYNCHRONIZE', 'mechanic:ORB_SYSTEM', ['scales with unique Orbs']],
-    ['card:LOOP', 'mechanic:ORB_SYSTEM', ['triggers passive']],
-    ['relic:EMOTION_CHIP', 'effect:LOSE_HP', ['requires HP loss']],
-    ['relic:EMOTION_CHIP', 'mechanic:ORB_SYSTEM', ['triggers passive']],
-    ['relic:GOLD_PLATED_CABLES', 'mechanic:ORB_SYSTEM', ['triggers passive']],
-    ['relic:METRONOME', 'mechanic:ORB_SYSTEM', ['triggers after 7 Channels']],
-    ['card:DARKNESS', 'mechanic:DARK', ['channels', 'triggers passive']],
-    ['card:THUNDER', 'mechanic:LIGHTNING', ['triggers on Evoke']],
-    ['card:VOLTAIC', 'mechanic:LIGHTNING', ['scales with previously Channeled']]
-  ];
-
-  const NECROBINDER_SEMANTIC_OVERRIDES = [
-    ['card:DEATHS_DOOR', 'power:DOOM_POWER', ['requires Doom application']],
-    ['card:END_OF_DAYS', 'power:DOOM_POWER', ['applies', 'kills at Doom ≥ HP']],
-    ['card:NO_ESCAPE', 'power:DOOM_POWER', ['applies', 'scales with existing Doom']],
-    ['card:TIMES_UP', 'power:DOOM_POWER', ['scales with Doom']],
-    ['card:SHROUD', 'power:DOOM_POWER', ['triggers on Doom application']],
-    ['card:REAPER_FORM', 'power:DOOM_POWER', ['applies from Attack damage']],
-    ['relic:BOOK_REPAIR_KNIFE', 'power:DOOM_POWER', ['triggers on Doom kill']],
-    ['relic:UNDYING_SIGIL', 'power:DOOM_POWER', ['modifies damage at Doom ≥ HP']],
-    ['card:DEVOUR_LIFE', 'card:SOUL', ['triggers on Soul play']],
-    ['card:HAUNT', 'card:SOUL', ['triggers on Soul play']],
-    ['card:SOUL_STORM', 'card:SOUL', ['scales with Souls in Exhaust Pile']],
-    ['card:SEANCE', 'card:SOUL', ['transforms into']],
-    ['relic:BONE_FLUTE', 'mechanic:OSTY', ['triggers on attack']],
-    ['card:NECRO_MASTERY', 'mechanic:OSTY', ['triggers on HP loss']],
-    ['card:BONE_SHARDS', 'mechanic:OSTY', ['requires alive', 'sacrifices']],
-    ['card:SACRIFICE', 'mechanic:OSTY', ['requires alive', 'sacrifices']],
-    ['card:FLATTEN', 'mechanic:OSTY', ['requires prior attack']],
-    ['card:SQUEEZE', 'mechanic:OSTY', ['scales with Osty Attacks']],
-    ['card:PROTECTOR', 'mechanic:OSTY', ['scales with Max HP']],
-    ['card:UNLEASH', 'mechanic:OSTY', ['scales with HP']],
-    ['card:SIC_EM', 'mechanic:OSTY', ['triggers on hit']]
-  ];
-
-  const REGENT_SEMANTIC_OVERRIDES = [
-    ['card:CRESCENT_SPEAR', 'mechanic:STAR_COUNT', ['scales with Star-cost cards']],
-    ['card:RADIATE', 'mechanic:STAR_COUNT', ['scales with Stars gained']],
-    ['card:CHILD_OF_THE_STARS', 'mechanic:STAR_COUNT', ['triggers on Stars spent', 'scales with Stars spent']],
-    ['relic:GALACTIC_DUST', 'mechanic:STAR_COUNT', ['scales with Stars spent']],
-    ['relic:MINI_REGENT', 'mechanic:STAR_COUNT', ['triggers on Stars spent']],
-    ['card:CONQUEROR', 'card:SOVEREIGN_BLADE', ['modifies damage']],
-    ['card:PARRY', 'card:SOVEREIGN_BLADE', ['grants Block']],
-    ['card:SEEKING_EDGE', 'card:SOVEREIGN_BLADE', ['modifies target scope']],
-    ['card:SWORD_SAGE', 'card:SOVEREIGN_BLADE', ['grants Replay']],
-    ['card:SUMMON_FORTH', 'card:SOVEREIGN_BLADE', ['moves to Hand']],
-    ['card:I_AM_INVINCIBLE', 'mechanic:DRAW_PILE', ['plays from top']],
-    ['card:FOREGONE_CONCLUSION', 'mechanic:DRAW_PILE', ['moves from']],
-    ['card:GLIMMER', 'mechanic:DRAW_PILE', ['moves to']],
-    ['card:PHOTON_CUT', 'mechanic:DRAW_PILE', ['moves to']],
-    ['card:SHINING_STRIKE', 'mechanic:DRAW_PILE', ['moves to']],
-    ['card:HEIRLOOM_HAMMER', 'mechanic:CARD_TYPE_COLORLESS', ['copies Colorless card']],
-    ['relic:VITRUVIAN_MINION', 'tag:MINION', ['modifies Minion cards']]
-  ];
-
-  function addCardTypeRelations(source, text, pushEdge) {
-    const t = norm(text);
-    const attack = nodeId('mechanic','CARD_TYPE_ATTACK');
-    const skill = nodeId('mechanic','CARD_TYPE_SKILL');
-    const power = nodeId('mechanic','CARD_TYPE_POWER');
-
-    if (/\bwhenever\b[^.\n]{0,42}\bplay\s+an?\s+attack\b/.test(t)) {
-      pushEdge(source.id, attack, 'triggers on Attack play', 'derived');
-    }
-    if (/\bfirst\b[^.\n]{0,34}\battack\b[^.\n]{0,30}\bplay/.test(t)) {
-      pushEdge(source.id, attack, 'triggers on Attack play', 'derived');
-    }
-    if (/\bnext\s+attack\b[^.\n]{0,44}\bplayed\s+an\s+(?:extra|additional)\s+time\b/.test(t)) {
-      pushEdge(source.id, attack, 'repeats next Attack', 'derived');
-    }
-    if (/\bnext\s+attack\b[^.\n]{0,44}\bcosts?\s+0\b/.test(t)) {
-      pushEdge(source.id, attack, 'modifies next Attack cost', 'derived');
-    }
-    if (/\bfor each\s+attack\b[^.\n]{0,30}\bin your hand\b/.test(t)) {
-      pushEdge(source.id, attack, 'scales with Attacks in hand', 'derived');
-    }
-    if (/\bfor each\s+attack\b[^.\n]{0,30}\bplayed\b/.test(t) || /\bfor each\s+attack\s+played\b/.test(t)) {
-      pushEdge(source.id, attack, 'scales with Attacks played', 'derived');
-    }
-    if (/\bcosts?\s+\d+\s+less\b[^.\n]{0,34}\bfor each attack played\b/.test(t)) {
-      pushEdge(source.id, attack, 'scales cost with Attacks played', 'derived');
-    }
-    if (/\brandom\s+attack\b[^.\n]{0,42}\bdiscard pile\b[^.\n]{0,42}\bhand\b/.test(t)) {
-      pushEdge(source.id, attack, 'moves Attack from Discard to Hand', 'derived');
-    }
-    if (/\badd\b[^.\n]{0,28}\brandom\s+attack\b[^.\n]{0,34}\bhand\b/.test(t)) {
-      pushEdge(source.id, attack, 'creates', 'derived');
-    }
-    if (/\btransform\s+all\s+attacks\b/.test(t)) {
-      pushEdge(source.id, attack, 'transforms Attacks', 'derived');
-    }
-    if (/\bdraw\s+cards\s+until\s+you\s+draw\s+a\s+non-attack\b/.test(t)) {
-      pushEdge(source.id, attack, 'draw condition', 'derived');
-    }
-    if (/\brandom\s+attack\b[^.\n]{0,28}\bis played\b/.test(t)) {
-      pushEdge(source.id, attack, 'plays Attack', 'derived');
-    }
-
-    if (/\bskills?\s+cost\s+0\b/.test(t)) {
-      pushEdge(source.id, skill, 'modifies Skill cost', 'derived');
-    }
-    if (/\bwhenever\b[^.\n]{0,38}\bplay\s+a\s+skill\b[^.\n]{0,38}\bexhaust\b/.test(t)) {
-      pushEdge(source.id, skill, 'exhausts Skills on play', 'derived');
-    }
-    if (/\bnext\s+skill\b[^.\n]{0,42}\bplayed\s+an\s+(?:extra|additional)\s+time\b/.test(t)) {
-      pushEdge(source.id, skill, 'repeats next Skill', 'derived');
-    }
-    if (/\bwhen\b[^.\n]{0,36}\bplay\s+a\s+skill\b/.test(t)) {
-      pushEdge(source.id, skill, 'triggers on Skill play', 'derived');
-    }
-    if (/\badd\s+sly\s+to\s+a\s+skill\b/.test(t)) {
-      pushEdge(source.id, skill, 'modifies Skill', 'derived');
-    }
-    if (/\bfor each\s+skill\s+played\b/.test(t)) {
-      pushEdge(source.id, skill, 'scales with Skills played', 'derived');
-    }
-    if (/\bdraw\s+a\s+skill\b/.test(t)) {
-      pushEdge(source.id, skill, 'requires drawn Skill', 'derived');
-    }
-
-    if (/\bwhenever\b[^.\n]{0,38}\bplay\s+a\s+power\b/.test(t)) {
-      pushEdge(source.id, power, 'triggers on Power play', 'derived');
-    }
-    if (/\bnext\s+power\b[^.\n]{0,42}\bplayed\s+an\s+(?:extra|additional)\s+time\b/.test(t)) {
-      pushEdge(source.id, power, 'repeats next Power', 'derived');
-    }
-
-    const status = nodeId('mechanic','CARD_TYPE_STATUS');
-    const colorless = nodeId('mechanic','CARD_TYPE_COLORLESS');
-
-    if (/\b(?:whenever|when|each time)\b[^.\n]{0,48}\bcreate(?:s|d|ing)?\s+(?:a\s+)?status\b/.test(t)) pushEdge(source.id, status, 'triggers on Status creation', 'derived');
-    else if (/\b(?:create|creates|created)\s+(?:a\s+)?status\b/.test(t)) pushEdge(source.id, status, 'creates Status', 'derived');
-    if (/\bexhaust\s+(?:all\s+)?(?:your\s+)?status\s+cards?\b/.test(t)) pushEdge(source.id, status, 'exhausts Status cards', 'derived');
-    if (/\bdraw\s+(?:a\s+)?status\b/.test(t)) pushEdge(source.id, status, 'triggers on Status draw', 'derived');
-    if (/\btransform\s+(?:all\s+)?status\s+cards?\b/.test(t)) pushEdge(source.id, status, 'transforms Status cards', 'derived');
-
-    if (/\badd\b[^.\n]{0,34}\bcolorless\s+card/.test(t)) pushEdge(source.id, colorless, 'creates Colorless card', 'derived');
-    if (/\bcopy\b[^.\n]{0,34}\bcolorless\s+card/.test(t)) pushEdge(source.id, colorless, 'copies Colorless card', 'derived');
-  }
-
-  function addTagSemanticRelations(source, text, pushEdge) {
-    const t = norm(text);
-
-    if (/\bcontaining\s+[“"]?strike[”"]?\b/.test(t) || /\bcards?\b[^.\n]{0,24}\bstrike\b/.test(t)) {
-      const strike = nodeId('tag','STRIKE');
-
-      if (/\bfor\s+(?:all|each)\b[^.\n]{0,42}\bstrike\b/.test(t)) {
-        pushEdge(source.id, strike, 'scales with Strike cards', 'derived');
-      } else if (/\bdraw\b[^.\n]{0,42}\bstrike\b/.test(t)) {
-        pushEdge(source.id, strike, 'triggers on drawing Strike', 'derived');
-      }
-    }
-
-    if (/\bcards?\s+containing\s+[“"]?minion[”"]?\b/.test(t)) {
-      pushEdge(source.id, nodeId('tag','MINION'), 'modifies Minion cards', 'derived');
-    }
-  }
-
-  function addCharacterMechanicRelations(source, text, pushEdge) {
-    const t = norm(text);
-    const orbSystem = nodeId('mechanic','ORB_SYSTEM');
-    const orbSlots = nodeId('mechanic','ORB_SLOTS');
-    const osty = nodeId('mechanic','OSTY');
-    const summon = nodeId('mechanic','SUMMON');
-    const forge = nodeId('mechanic','FORGE');
-    const replay = nodeId('mechanic','REPLAY');
-    const fatal = nodeId('mechanic','FATAL');
-    const stars = nodeId('mechanic','STAR_COUNT');
-
-    const orbNames = [
-      ['LIGHTNING','lightning'],
-      ['FROST','frost'],
-      ['DARK','dark'],
-      ['PLASMA','plasma'],
-      ['GLASS','glass']
-    ];
-
-    for (const [id, name] of orbNames) {
-      if (new RegExp('\\bchannel(?:s|ed|ing)?\\b[^.\\n]{0,30}\\b' + name + '\\b').test(t)) {
-        pushEdge(source.id, nodeId('mechanic',id), 'channels', 'derived');
-      }
-      if (new RegExp('\\bevoke(?:s|d|ing)?\\b[^.\\n]{0,30}\\b' + name + '\\b').test(t)) {
-        pushEdge(source.id, nodeId('mechanic',id), 'evokes', 'derived');
-      }
-      if (new RegExp('\\btrigger\\b[^.\\n]{0,40}\\bpassive\\b[^.\\n]{0,34}\\b' + name + '\\b').test(t)) {
-        pushEdge(source.id, nodeId('mechanic',id), 'triggers passive', 'derived');
-      }
-    }
-
-    if (/\bchannel(?:s|ed|ing)?\b[^.\n]{0,34}\borbs?\b|\bchanneled\s+orb\b/.test(t)) {
-      const relation = /\bfor each\b[^.\n]{0,42}\b(?:channeled\s+)?orb\b/.test(t) ? 'scales with Channeled Orbs' : 'channels';
-      pushEdge(source.id, orbSystem, relation, 'derived');
-    }
-    if (/\bevoke(?:s|d|ing)?\b[^.\n]{0,34}\borbs?\b/.test(t)) pushEdge(source.id, orbSystem, 'evokes', 'derived');
-    if (/\btrigger\b[^.\n]{0,42}\bpassive\b[^.\n]{0,38}\borbs?\b/.test(t)) pushEdge(source.id, orbSystem, 'triggers passive', 'derived');
-    if (/\bfor each unique orb\b/.test(t)) pushEdge(source.id, orbSystem, 'scales with unique Orbs', 'derived');
-
-    if (/\bgain\s+\d+\s+(?:additional\s+)?orb slots?\b/.test(t)) pushEdge(source.id, orbSlots, 'grants', 'derived');
-    if (/\blose\s+\d+\s+orb slots?\b/.test(t)) pushEdge(source.id, orbSlots, 'reduces', 'derived');
-    if (/\badditional\s+orb slots?\b/.test(t) && !/\bgain\b/.test(t)) pushEdge(source.id, orbSlots, 'grants', 'derived');
-
-    if (/\bsummon\b/.test(t)) pushEdge(source.id, summon, 'summons / strengthens Osty', 'derived');
-    if (/\bosty\b/.test(t)) {
-      let relation = 'interacts with';
-      if (/\bosty\b[^.\n]{0,30}\b(?:deal|deals|attack|attacks)\b/.test(t)) relation = 'commands attack';
-      if (/\bosty\b[^.\n]{0,30}\bheal(?:s|ed|ing)?\b/.test(t)) relation = 'heals';
-      if (/\bosty\b[^.\n]{0,30}\bdies?\b/.test(t)) relation = 'sacrifices';
-      if (/\bif\s+osty\s+is\s+alive\b/.test(t)) relation = 'requires alive';
-      if (/\bosty(?:'s)?\s+current\s+hp\b/.test(t)) relation = 'scales with HP';
-      if (/\bosty(?:'s)?\s+attacks?\b[^.\n]{0,34}\badditional\s+damage\b/.test(t)) relation = 'modifies damage';
-      pushEdge(source.id, osty, relation, 'derived');
-    }
-
-    if (/\bforge\b/.test(t)) {
-      const relation = /\bwhenever\b[^.\n]{0,30}\bforge\b/.test(t) ? 'triggers on Forge' : 'forges';
-      pushEdge(source.id, forge, relation, 'derived');
-    }
-    if (/\breplay\b/.test(t)) pushEdge(source.id, replay, 'grants Replay', 'derived');
-    if (/\bfatal\b|\bif this kills?\b/.test(t)) pushEdge(source.id, fatal, 'triggers on kill', 'derived');
-
-    if (/\[s\]/.test(t)) {
-      let relation = 'uses Stars';
-      if (/\bwhenever\s+you\s+(?:spend|gain)\b[^.\n]{0,22}\[s\]/.test(t) || /\bfirst time\s+you\s+spend\b[^.\n]{0,22}\[s\]/.test(t)) relation = 'triggers on Stars';
-      else if (/\bfor (?:each|every)\b[^.\n]{0,42}\[s\]/.test(t) || /\[s\]\s+cost/.test(t) || /\beach\s+\[s\]\s+spent\b/.test(t)) relation = 'scales with Stars';
-      else if (/\bspend\b[^.\n]{0,24}\[s\]/.test(t)) relation = 'spends Stars';
-      else if (/\bgain\b[^.\n]{0,30}\[s\]/.test(t)) relation = 'gains Stars';
-      pushEdge(source.id, stars, relation, 'derived');
-    }
-  }
-
-  function buildEdges(nodes, manualLinks, cardPowers) {
-    const edges = [];
-    const edgeIds = new Set();
-    const byId = new Map(nodes.map(n => [n.id, n]));
-    const cards = nodes.filter(n => n.type === 'card');
-    const powers = nodes.filter(n => n.type === 'power');
-
-    const candidateGroups = new Map();
-    const dedicatedMechanics = new Set([
-      'mechanic:BLOCK',
-      'mechanic:ENERGY',
-      'mechanic:HIT_POINTS',
-      'mechanic:DRAW_PILE',
-      'mechanic:DISCARD_PILE',
-      'mechanic:EXHAUST_PILE',
-      'mechanic:ORB_SYSTEM',
-      'mechanic:ORB_SLOTS',
-      'mechanic:OSTY',
-      'mechanic:SUMMON',
-      'mechanic:FORGE',
-      'mechanic:REPLAY',
-      'mechanic:FATAL',
-      'mechanic:STAR_COUNT',
-      'mechanic:CARD_TYPE_ATTACK',
-      'mechanic:CARD_TYPE_SKILL',
-      'mechanic:CARD_TYPE_POWER',
-      'mechanic:CARD_TYPE_STATUS',
-      'mechanic:CARD_TYPE_COLORLESS',
-      'mechanic:LIGHTNING',
-      'mechanic:FROST',
-      'mechanic:DARK',
-      'mechanic:PLASMA',
-      'mechanic:GLASS'
-    ]);
-
-    for (const candidate of nodes.filter(n =>
-      !['keyword','effect'].includes(n.type) &&
-      !dedicatedMechanics.has(n.id) &&
-      n.name &&
-      n.name.length >= 4
-    )) {
-      const key = norm(candidate.name);
-      if (!candidateGroups.has(key)) candidateGroups.set(key, []);
-      candidateGroups.get(key).push(candidate);
-    }
-    const candidates = [...candidateGroups.values()]
-      .filter(group => group.length === 1)
-      .map(group => group[0]);
-
-    const keywords = nodes.filter(n => n.type === 'keyword');
-    const effects = new Map(EFFECT_DEFS.map(effect => [effect.id, effect]));
-
-    const pushEdge = (source, target, relation, provenance, note) => {
-      if (!byId.has(source) || !byId.has(target) || source === target) return;
-      const id = source + '|' + target + '|' + relation;
-      if (edgeIds.has(id)) return;
-      edgeIds.add(id);
-      edges.push({
-        id,
-        source,
-        target,
-        relation,
-        provenance: provenance || 'description',
-        note: note || ''
-      });
-    };
-
-    for (const card of cards) {
-      for (const kw of card.keywords || []) {
-        const target = nodeId('keyword', slug(kw));
-        if (byId.has(target)) pushEdge(card.id, target, 'has keyword', 'explicit');
-
-        if (slug(kw) === 'SLY') {
-          pushEdge(card.id, nodeId('effect', 'DISCARD'), 'benefits from discard', 'explicit');
-        }
-
-        if (slug(kw) === 'EXHAUST') {
-          pushEdge(card.id, nodeId('effect', 'EXHAUST_CARD'), 'self-exhausts', 'explicit');
-        }
-      }
-
-      for (const tag of card.tags || []) {
-        const target = nodeId('tag', slug(tag));
-        if (byId.has(target)) pushEdge(card.id, target, 'has tag', 'explicit');
-      }
-
-      for (const power of (cardPowers && cardPowers[card.sourceId]) || []) {
-        const target = nodeId('power', power.id);
-        const powerNode = byId.get(target);
-        if (powerNode) {
-          pushEdge(card.id, target, inferPowerRelation(card, powerNode), 'explicit');
-        }
-      }
-    }
-
-    for (const source of nodes) {
-      const text = source.description || '';
-      if (!text) continue;
-
-      for (const target of candidates) {
-        if (target.id === source.id) continue;
-        if (containsEntityName(text, target.name)) {
-          for (const relation of inferRelations(text, target.name)) {
-            if (relation === 'references') continue;
-            pushEdge(source.id, target.id, relation, 'derived');
-          }
-        }
-      }
-
-      for (const keyword of keywords) {
-        if (containsEntityName(text, keyword.name)) {
-          const relation = inferKeywordRelation(text, keyword.name);
-          if (relation && relation !== 'uses keyword') {
-            pushEdge(source.id, keyword.id, relation, 'derived');
-          }
-        }
-      }
-
-      addPileRelations(source, text, pushEdge);
-
-      for (const [effectId, effect] of effects) {
-        if (!effect.patterns.some(pattern => pattern.test(text))) continue;
-
-        const relation = inferEffectRelation(effectId, text, effect.relation);
-
-        // Plain damage/play edges turn the graph into high-degree hubs without
-        // adding interaction meaning. Keep modifiers, triggers, requirements, etc.
-        if (effectId === 'DAMAGE' && relation === 'deals damage') continue;
-        if (effectId === 'PLAY_CARD' && relation === 'plays cards') continue;
-
-        // Prefer a concrete generated-card edge over a second generic Create Card edge.
-        if (effectId === 'CREATE_CARD') {
-          const hasConcreteCreate = edges.some(edge =>
-            edge.source === source.id &&
-            edge.relation === 'creates' &&
-            byId.get(edge.target)?.type !== 'effect'
-          );
-          if (hasConcreteCreate) continue;
-        }
-
-        pushEdge(source.id, nodeId('effect', effectId), relation, 'derived');
-      }
-
-      const block = byId.get(nodeId('mechanic','BLOCK'));
-      const energy = byId.get(nodeId('mechanic','ENERGY'));
-      const hp = byId.get(nodeId('mechanic','HIT_POINTS'));
-
-      if (block && /\bgain(?:s)?\b[^.\n]*\bBlock\b/i.test(text)) pushEdge(source.id, block.id, 'grants', 'derived');
-      if (block && /\bremove\b[^.\n]{0,42}\bBlock\b/i.test(text)) pushEdge(source.id, block.id, 'removes', 'derived');
-      if (block && /\bBlock\s+gain\b/i.test(text)) pushEdge(source.id, block.id, 'modifies', 'derived');
-      if (block && /\bBlock\s+is\s+not\s+removed\b/i.test(text)) pushEdge(source.id, block.id, 'retains', 'derived');
-      if (energy && /\bgain(?:s)?\b[^.\n]*(?:\[E\]|Energy)/i.test(text)) pushEdge(source.id, energy.id, 'grants', 'derived');
-      if (energy && /\blose(?:s)?\b[^.\n]*(?:\[E\]|Energy)/i.test(text)) pushEdge(source.id, energy.id, 'consumes', 'derived');
-      if (hp && /\bheal(?:s|ed|ing)?\b/i.test(text)) pushEdge(source.id, hp.id, 'restores', 'derived');
-      if (hp && /\blose(?:s)?\b[^.\n]*\bHP\b/i.test(text)) pushEdge(source.id, hp.id, 'reduces', 'derived');
-      if (hp && /\b(?:raise|increase)\b[^.\n]{0,42}\bMax HP\b/i.test(text)) pushEdge(source.id, hp.id, 'increases Max HP', 'derived');
-      if (hp && /\bHP\b[^.\n]{0,24}\b(?:at or below|below|less than|under)\b[^.\n]{0,18}\b\d+%/i.test(text)) pushEdge(source.id, hp.id, 'requires low HP', 'derived');
-    }
-
-    const ontologyEdges = [
-      ['effect:DRAW', 'mechanic:DRAW_PILE', 'draws from'],
-      ['effect:DISCARD', 'mechanic:DISCARD_PILE', 'moves to'],
-      ['keyword:EXHAUST', 'mechanic:EXHAUST_PILE', 'moves to'],
-      ['effect:EXHAUST_CARD', 'mechanic:EXHAUST_PILE', 'moves cards to'],
-      ['keyword:SLY', 'effect:DISCARD', 'triggers when discarded'],
-      ['effect:HEAL', 'mechanic:HIT_POINTS', 'restores'],
-      ['effect:LOSE_HP', 'mechanic:HIT_POINTS', 'reduces'],
-      ['effect:COST_CHANGE', 'mechanic:ENERGY', 'modifies cost'],
-      ['power:FOCUS_POWER', 'mechanic:ORB_SYSTEM', 'modifies effectiveness'],
-      ['mechanic:ORB_SLOTS', 'mechanic:ORB_SYSTEM', 'sets capacity'],
-      ['mechanic:SUMMON', 'mechanic:OSTY', 'summons / strengthens'],
-      ['mechanic:FORGE', 'card:SOVEREIGN_BLADE', 'modifies damage'],
-      ['mechanic:FORGE', 'card:SOVEREIGN_BLADE', 'creates on first Forge'],
-      ['mechanic:REPLAY', 'effect:PLAY_CARD', 'repeats card play']
-    ];
-
-    for (const [source, target, relation] of ontologyEdges) {
-      pushEdge(source, target, relation, 'explicit');
-    }
-
-    for (const card of cards) {
-      for (const power of powers) {
-        const base = power.name.replace(/\s+Power$/i, '');
-        if (norm(card.name) === norm(base)) {
-          pushEdge(card.id, power.id, 'grants', 'name-match');
-        }
-      }
-    }
-
-    for (const [source, target, relations] of [
-      ...SILENT_SEMANTIC_OVERRIDES,
-      ...IRONCLAD_SEMANTIC_OVERRIDES,
-      ...DEFECT_SEMANTIC_OVERRIDES,
-      ...NECROBINDER_SEMANTIC_OVERRIDES,
-      ...REGENT_SEMANTIC_OVERRIDES
-    ]) {
-      if (!byId.has(source) || !byId.has(target)) continue;
-
-      for (let i = edges.length - 1; i >= 0; i -= 1) {
-        const edge = edges[i];
-        if (edge.source === source && edge.target === target) {
-          edgeIds.delete(edge.id);
-          edges.splice(i, 1);
-        }
-      }
-
-      for (const relation of relations) pushEdge(source, target, relation, 'curated');
-    }
-
-    for (const link of manualLinks || []) {
-      pushEdge(link.source, link.target, link.relation || 'related', 'curated', link.note || '');
-    }
-
-    return edges;
   }
 
   function buildAdjacency() {
@@ -1134,6 +177,7 @@
     state.pixi = new PIXI.Application({
       resizeTo: host,
       backgroundAlpha: 0,
+      autoStart: false,
       antialias: true,
       autoDensity: true,
       resolution: Math.min(window.devicePixelRatio || 1, 2)
@@ -1174,9 +218,30 @@
 
     new ResizeObserver(() => {
       state.pixi.stage.hitArea = state.pixi.screen;
+      requestRender();
     }).observe(host);
 
-    state.pixi.ticker.add(renderFrame);
+    document.addEventListener('visibilitychange', syncAnimation);
+  }
+
+  // Render on simulation ticks and interaction changes. A settled graph should
+  // not rebuild every edge and redraw WebGL continuously while someone reads.
+  function requestRender() {
+    if (state.renderPending !== null || document.hidden || !state.pixi) return;
+    state.renderPending = requestAnimationFrame(() => {
+      state.renderPending = null;
+      renderFrame();
+      state.pixi.render();
+    });
+  }
+
+  function syncAnimation() {
+    const paused = document.hidden || !$('palette-backdrop').classList.contains('hidden');
+    if (paused) state.simulation?.stop();
+    else {
+      if (state.simulation?.alpha() >= state.simulation?.alphaMin()) state.simulation.restart();
+      requestRender();
+    }
   }
 
   function makeOverlayLabel() {
@@ -1245,12 +310,14 @@
       styleNodeView(node);
       state.hoverLabel.text = node.name;
       state.hoverLabel.visible = true;
+      requestRender();
     });
 
     view.on('pointerout', () => {
       if (state.hoveredId === node.id) state.hoveredId = null;
       styleNodeView(node);
       state.hoverLabel.visible = false;
+      requestRender();
     });
 
     styleNodeView(node);
@@ -1324,7 +391,7 @@
     state.focusLabel.visible = Boolean(state.focusedId && state.byId.has(state.focusedId));
     updateAllNodeStyles();
     rebuildSimulation();
-    renderFrame();
+    requestRender();
   }
 
   function rebuildSimulation() {
@@ -1354,6 +421,8 @@
       .alphaDecay(0.024)
       .alphaMin(0.002)
       .alpha(0.9)
+      .on('tick', requestRender)
+      .on('end', requestRender)
       .restart();
 
     $('physics-badge').classList.add('active');
@@ -1433,8 +502,9 @@
     }
 
     if (state.simulation) {
-      const active = state.simulation.alpha() > 0.015 || Boolean(state.draggingNode);
+      const active = state.simulation.alpha() >= state.simulation.alphaMin() || Boolean(state.draggingNode);
       $('physics-badge').classList.toggle('active', active);
+      $('physics-badge').textContent = active ? 'live physics' : 'layout settled';
     }
   }
 
@@ -1544,6 +614,7 @@
         state.worldStart.x + dx,
         state.worldStart.y + dy
       );
+      requestRender();
     }
   }
 
@@ -1630,6 +701,7 @@
       midpoint.x - state.pinchStart.worldX * newScale,
       midpoint.y - state.pinchStart.worldY * newScale
     );
+    requestRender();
   }
 
   function onTouchEnd(e) {
@@ -1656,6 +728,7 @@
       point.x - worldX * newScale,
       point.y - worldY * newScale
     );
+    requestRender();
   }
 
   function zoomBy(factor) {
@@ -1670,6 +743,7 @@
       point.x - worldX * newScale,
       point.y - worldY * newScale
     );
+    requestRender();
   }
 
   function fitGraph() {
@@ -1702,6 +776,7 @@
       state.pixi.screen.width / 2 - centerX * scale,
       state.pixi.screen.height / 2 - centerY * scale
     );
+    requestRender();
   }
 
   function renderTypeFilters() {
@@ -1723,20 +798,6 @@
       '<div class="legend-row"><span class="legend-left"><span class="legend-dot" style="background:' +
       TYPE_CSS[type] + '"></span>' + label + '</span></div>'
     ).join('');
-  }
-
-  function relationFamily(relation) {
-    const r = norm(relation);
-
-    if (/create|copy|transform/.test(r)) return 'creation';
-    if (/appl|grant|restore|heal|increase|max hp/.test(r)) return 'application';
-    if (/trigger|benefit/.test(r)) return 'trigger';
-    if (/scale|equal to/.test(r)) return 'scaling';
-    if (/require|restrict|condition/.test(r)) return 'requirement';
-    if (/move|play from|plays from|moves to|moves from|return/.test(r)) return 'movement';
-    if (/modif|reduce|remove|retain|double|repeat|forg|target scope|sets capacity/.test(r)) return 'modification';
-    if (/draw|discard|exhaust|channel|evoke|summon|spend|consume|lose hp|self-exhaust/.test(r)) return 'resource';
-    return 'other';
   }
 
   function edgePassesFilters(edge) {
@@ -1812,7 +873,7 @@
     const first = el.options[0].outerHTML;
 
     el.innerHTML = first + values
-      .filter(Boolean)
+      .filter(value => value !== null && value !== undefined && value !== '')
       .sort((a, b) => String(a).localeCompare(String(b)))
       .map(v => '<option value="' + htmlEsc(v) + '">' + htmlEsc(formatter(v)) + '</option>')
       .join('');
@@ -1860,7 +921,10 @@
     document.querySelectorAll('.depth-button').forEach(button => {
       button.addEventListener('click', () => {
         state.depth = Number(button.dataset.depth);
-        document.querySelectorAll('.depth-button').forEach(b => b.classList.toggle('active', b === button));
+        document.querySelectorAll('.depth-button').forEach(b => {
+          b.classList.toggle('active', b === button);
+          b.setAttribute('aria-pressed', String(b === button));
+        });
         if (state.viewMode === 'local') applyFilters(true);
       });
     });
@@ -1886,21 +950,45 @@
     $('zoom-in').addEventListener('click', () => zoomBy(1.18));
     $('zoom-out').addEventListener('click', () => zoomBy(1 / 1.18));
 
-    $('filters-toggle').addEventListener('click', () => $('filters-panel').classList.add('open'));
-    $('filters-close').addEventListener('click', () => $('filters-panel').classList.remove('open'));
-    $('inspector-toggle').addEventListener('click', () => $('inspector-panel').classList.add('open'));
-    $('inspector-close').addEventListener('click', () => $('inspector-panel').classList.remove('open'));
+    $('filters-toggle').addEventListener('click', () => setPanelOpen('filters', true, true));
+    $('filters-close').addEventListener('click', () => setPanelOpen('filters', false));
+    $('inspector-toggle').addEventListener('click', () => setPanelOpen('inspector', true, true));
+    $('inspector-close').addEventListener('click', () => setPanelOpen('inspector', false));
+    window.matchMedia('(max-width: 900px)').addEventListener('change', syncPanels);
+    syncPanels();
 
     $('command-button').addEventListener('click', openPalette);
+    $('palette-close').addEventListener('click', closePalette);
     $('palette-backdrop').addEventListener('mousedown', e => {
       if (e.target === $('palette-backdrop')) closePalette();
     });
     $('palette-input').addEventListener('input', updatePalette);
     $('palette-input').addEventListener('keydown', handlePaletteKeys);
+    for (const direction of ['outgoing', 'incoming']) {
+      const list = $(direction === 'outgoing' ? 'outgoing-list' : 'backlinks-list');
+      list.addEventListener('click', e => {
+        const relation = e.target.closest('.relation[data-target]');
+        if (relation) {
+          focusNode(relation.dataset.target);
+          $('entity-name').focus({ preventScroll: true });
+        } else if (e.target.closest('.relations-more')) {
+          state.inspectorLimits[direction] += 50;
+          renderInspector(state.focusedId);
+          const more = list.querySelector('.relations-more');
+          (more || list.querySelector('.relation:last-child'))?.focus({ preventScroll: true });
+        }
+      });
+    }
 
     window.addEventListener('popstate', syncFocusFromUrl);
 
     document.addEventListener('keydown', e => {
+      if (!$('palette-backdrop').classList.contains('hidden') && e.key === 'Tab') {
+        const first = $('palette-input'), last = $('palette-close');
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        return;
+      }
       const ctrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k';
 
       if (ctrlK) {
@@ -1909,22 +997,51 @@
         return;
       }
 
-      if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+      if (e.key === '/' && !document.activeElement.matches('input, textarea, select, [contenteditable="true"]')) {
         e.preventDefault();
+        if (window.innerWidth <= 900) setPanelOpen('filters', true);
         $('search-input').focus();
       }
 
       if (e.key === 'Escape') {
         if (!$('palette-backdrop').classList.contains('hidden')) closePalette();
+        else if (window.innerWidth <= 900 && $('filters-panel').classList.contains('open')) setPanelOpen('filters', false);
+        else if (window.innerWidth <= 900 && $('inspector-panel').classList.contains('open')) setPanelOpen('inspector', false);
         else clearFocus();
       }
     });
+  }
+
+  function syncPanels() {
+    const mobile = window.innerWidth <= 900;
+    for (const name of ['filters', 'inspector']) {
+      const panel = $(name + '-panel');
+      const open = panel.classList.contains('open');
+      panel.inert = mobile && !open;
+      $(name + '-toggle').setAttribute('aria-expanded', String(mobile && open));
+    }
+  }
+
+  function setPanelOpen(name, open, moveFocus = false) {
+    const panel = $(name + '-panel');
+    const returnFocus = !open && panel.contains(document.activeElement);
+    if (open && window.innerWidth <= 900) {
+      $('filters-panel').classList.remove('open');
+      $('inspector-panel').classList.remove('open');
+    }
+    panel.classList.toggle('open', open);
+    syncPanels();
+    if (returnFocus) $(name + '-toggle').focus();
+    if (moveFocus && window.innerWidth <= 900) $(name + '-close').focus();
   }
 
   function setViewMode(mode) {
     state.viewMode = mode;
     $('global-mode').classList.toggle('active', mode === 'global');
     $('local-mode').classList.toggle('active', mode === 'local');
+    $('global-mode').setAttribute('aria-pressed', String(mode === 'global'));
+    $('local-mode').setAttribute('aria-pressed', String(mode === 'local'));
+    document.querySelectorAll('.depth-button').forEach(button => { button.disabled = mode !== 'local'; });
     $('depth-controls').classList.toggle('disabled', mode !== 'local');
     $('selection-hint').classList.toggle('hidden', !(mode === 'local' && !state.focusedId));
     applyFilters(true);
@@ -2051,7 +1168,7 @@
       $('inspector-empty').classList.remove('hidden');
       $('note-path').textContent = 'No note selected';
       $('note-panel-title').textContent = 'Reading view';
-      $('inspector-panel').classList.remove('open');
+      setPanelOpen('inspector', false);
     }
 
     state.visibleNodes = [...visible].map(id => state.byId.get(id)).filter(Boolean);
@@ -2069,11 +1186,23 @@
 
   function updateAllNodeStyles() {
     for (const node of state.visibleNodes) styleNodeView(node);
+    requestRender();
   }
 
   function focusNode(id, writeUrl = true) {
     const node = state.byId.get(id);
     if (!node) return;
+
+    // Navigation must also reveal a note excluded by the current character or
+    // node filters. Edge filters remain useful while reading that note.
+    const reveal = !state.visibleNodes.some(visible => visible.id === id);
+    if (reveal) {
+      $('search-input').value = '';
+      for (const filter of ['color-filter', 'rarity-filter', 'card-type-filter', 'cost-filter']) $(filter).value = 'all';
+      state.visibleTypes.add(node.type);
+      const typeBox = $('type-filters').querySelector('input[data-type="' + node.type + '"]');
+      if (typeBox) typeBox.checked = true;
+    }
 
     state.focusedId = id;
     if (writeUrl) setNodeInUrl(id, false);
@@ -2082,14 +1211,14 @@
     $('copy-link').disabled = false;
     renderInspector(id);
 
-    if (state.viewMode === 'local') {
+    if (state.viewMode === 'local' || reveal) {
       applyFilters(true);
     } else {
       updateAllNodeStyles();
       setTimeout(() => fitNeighborhood(id), 20);
     }
 
-    if (window.innerWidth <= 900) $('inspector-panel').classList.add('open');
+    if (window.innerWidth <= 900) setPanelOpen('inspector', true);
   }
 
   function fitNeighborhood(id) {
@@ -2126,6 +1255,7 @@
       state.pixi.screen.width / 2 - centerX * scale,
       state.pixi.screen.height / 2 - centerY * scale
     );
+    requestRender();
   }
 
   function clearFocus(writeUrl = true) {
@@ -2134,7 +1264,7 @@
     document.title = 'STS2 Bubble — Slay the Spire 2 Interaction Graph';
     $('clear-focus').disabled = true;
     $('copy-link').disabled = true;
-    $('inspector-panel').classList.remove('open');
+    setPanelOpen('inspector', false);
 
     $('entity-card').classList.add('hidden');
     $('inspector-empty').classList.remove('hidden');
@@ -2152,22 +1282,27 @@
       edge.provenance === 'name-match' ? 'matched' : 'text';
 
     const family = relationFamily(edge.relation);
-    return '<div class="relation" data-target="' + htmlEsc(node.id) + '">' +
+    return '<button type="button" class="relation" data-target="' + htmlEsc(node.id) + '">' +
       '<span class="relation-dot" style="background:' + TYPE_CSS[node.type] + '"></span>' +
-      '<div><div class="relation-name">' + htmlEsc(node.name) + '</div>' +
-      '<div class="relation-type"><span class="relation-family-dot" style="background:' + RELATION_FAMILY_CSS[family] + '"></span>' +
+      '<span><span class="relation-name">' + htmlEsc(node.name) + '</span>' +
+      '<span class="relation-type"><span class="relation-family-dot" style="background:' + RELATION_FAMILY_CSS[family] + '"></span>' +
       htmlEsc(direction + ' · ' + edge.relation) +
-      ' · <span class="relation-provenance">' + htmlEsc(provenance) + '</span></div></div></div>';
+      ' · <span class="relation-provenance">' + htmlEsc(provenance) + '</span></span></span></button>';
   }
 
   function renderInspector(id) {
     const node = state.byId.get(id);
     if (!node) return;
+    if (state.inspectorId !== id) {
+      state.inspectorId = id;
+      state.inspectorLimits = { outgoing: 50, incoming: 50 };
+      $('inspector-panel').scrollTop = 0;
+    }
 
     $('inspector-empty').classList.add('hidden');
     $('entity-card').classList.remove('hidden');
 
-    $('note-path').textContent = TYPE_FOLDERS[node.type] + ' / ' + node.name + '.md';
+    $('note-path').textContent = state.nodePaths.get(node.id);
     $('note-panel-title').textContent = 'Reading view';
     $('entity-kicker').textContent = TYPE_LABELS[node.type].replace(/s$/, '');
     $('entity-name').textContent = node.name;
@@ -2215,7 +1350,10 @@
         .filter(([key]) => key !== 'description')
         .map(([key, value]) =>
           '<div class="upgrade-delta"><span class="upgrade-key">' + htmlEsc(key.replace(/_/g, ' ')) +
-          '</span><span class="upgrade-value">+' + htmlEsc(value) + '</span></div>'
+          '</span><span class="upgrade-value">' + htmlEsc(
+            typeof value === 'number' ? (value > 0 ? '+' + value : String(value)) :
+            Array.isArray(value) ? value.join(', ') : String(value)
+          ) + '</span></div>'
         ).join('');
       $('upgrade-card').innerHTML = description + deltas;
     } else {
@@ -2236,17 +1374,15 @@
     $('outgoing-count').textContent = outgoing.length;
     $('backlinks-count').textContent = incoming.length;
 
-    $('outgoing-list').innerHTML = outgoing.length
-      ? outgoing.slice(0, 150).map(item => relationRow(item.edge, item.node, 'to')).join('')
-      : '<div class="empty-links">No outgoing links.</div>';
-
-    $('backlinks-list').innerHTML = incoming.length
-      ? incoming.slice(0, 150).map(item => relationRow(item.edge, item.node, 'from')).join('')
-      : '<div class="empty-links">No backlinks.</div>';
-
-    document.querySelectorAll('.relation[data-target]').forEach(el => {
-      el.addEventListener('click', () => focusNode(el.dataset.target));
-    });
+    const renderRelations = (items, direction, label) => {
+      const limit = state.inspectorLimits[direction];
+      const sorted = items.sort((a, b) => a.node.name.localeCompare(b.node.name) || a.edge.relation.localeCompare(b.edge.relation));
+      if (!sorted.length) return '<div class="empty-links">No ' + label + ' matching relationship filters.</div>';
+      const rows = sorted.slice(0, limit).map(item => relationRow(item.edge, item.node, direction === 'outgoing' ? 'to' : 'from')).join('');
+      return rows + (sorted.length > limit ? '<button type="button" class="ghost-button relations-more">Show more ' + label + ' (' + (sorted.length - limit) + ' remaining)</button>' : '');
+    };
+    $('outgoing-list').innerHTML = renderRelations(outgoing, 'outgoing', 'outgoing links');
+    $('backlinks-list').innerHTML = renderRelations(incoming, 'incoming', 'backlinks');
   }
 
   function resetFilters() {
@@ -2275,10 +1411,16 @@
 
     updatePhysics();
     applyFilters(true);
+    if (state.focusedId) renderInspector(state.focusedId);
   }
 
   function openPalette() {
+    if (!$('palette-backdrop').classList.contains('hidden')) { $('palette-input').focus(); return; }
+    state.paletteReturnFocus = document.activeElement;
     $('palette-backdrop').classList.remove('hidden');
+    $('palette-input').setAttribute('aria-expanded', 'true');
+    document.querySelector('.app-shell').inert = true;
+    syncAnimation();
     $('palette-input').value = '';
     state.paletteIndex = 0;
     updatePalette();
@@ -2287,6 +1429,12 @@
 
   function closePalette() {
     $('palette-backdrop').classList.add('hidden');
+    $('palette-input').setAttribute('aria-expanded', 'false');
+    document.querySelector('.app-shell').inert = false;
+    syncAnimation();
+    const previous = state.paletteReturnFocus;
+    if (previous?.isConnected && !previous.closest('[inert]')) previous.focus({ preventScroll: true });
+    else $('command-button').focus();
   }
 
   function updatePalette() {
@@ -2307,16 +1455,21 @@
       })
       .slice(0, 14);
 
-    state.paletteIndex = Math.min(state.paletteIndex, Math.max(0, state.paletteMatches.length - 1));
+    state.paletteIndex = Math.max(0, Math.min(state.paletteIndex, state.paletteMatches.length - 1));
 
     $('palette-results').innerHTML = state.paletteMatches.length
       ? state.paletteMatches.map((node, index) =>
-          '<div class="palette-result' + (index === state.paletteIndex ? ' active' : '') + '" data-id="' + htmlEsc(node.id) + '">' +
+          '<div role="option" id="palette-result-' + index + '" aria-selected="' + (index === state.paletteIndex) + '" class="palette-result' + (index === state.paletteIndex ? ' active' : '') + '" data-id="' + htmlEsc(node.id) + '">' +
           '<span class="palette-result-dot" style="background:' + TYPE_CSS[node.type] + '"></span>' +
           '<span class="palette-result-name">' + htmlEsc(node.name) + '</span>' +
           '<span class="palette-result-meta">' + htmlEsc(TYPE_LABELS[node.type].replace(/s$/, '')) + '</span></div>'
         ).join('')
       : '<div class="empty-links">No matching notes.</div>';
+
+    if (state.paletteMatches.length) {
+      $('palette-input').setAttribute('aria-activedescendant', 'palette-result-' + state.paletteIndex);
+      $('palette-result-' + state.paletteIndex).scrollIntoView({ block: 'nearest' });
+    } else $('palette-input').removeAttribute('aria-activedescendant');
 
     $('palette-results').querySelectorAll('.palette-result').forEach(el => {
       el.addEventListener('click', () => openPaletteResult(el.dataset.id));
@@ -2338,45 +1491,30 @@
       if (selected) openPaletteResult(selected.id);
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       closePalette();
     }
   }
 
   function openPaletteResult(id) {
     closePalette();
-
-    const node = state.byId.get(id);
-    if (!node) return;
-
-    if (!matchesFilters(node)) {
-      $('search-input').value = '';
-      $('color-filter').value = 'all';
-      $('rarity-filter').value = 'all';
-      $('card-type-filter').value = 'all';
-      $('cost-filter').value = 'all';
-
-      state.visibleTypes.add(node.type);
-      const typeBox = $('type-filters').querySelector('input[data-type="' + node.type + '"]');
-      if (typeBox) typeBox.checked = true;
-
-      applyFilters(false);
-    }
-
     focusNode(id);
+    if (state.byId.has(id)) $('entity-name').focus({ preventScroll: true });
   }
 
   async function boot() {
     try {
       const [entries, datasetMeta] = await Promise.all([
-        Promise.all(Object.entries(SOURCES).map(async pair => [pair[0], await loadJson(pair[1])])),
-        loadOptionalJson(SOURCE_META_URL, {})
+        Promise.all(Object.entries(SOURCES).map(async pair => [pair[0], await loadJson('/' + pair[1])])),
+        loadJson('/' + SOURCE_META_URL)
       ]);
 
       const raw = Object.fromEntries(entries);
-      const manualLinks = await loadOptionalJson('./data/manual-links.json', []);
+      const manualLinks = await loadJson('./data/manual-links.json');
       state.datasetMeta = datasetMeta || {};
 
       state.nodes = normalizeData(raw);
+      state.nodePaths = createNodePaths(state.nodes);
       state.edges = buildEdges(state.nodes, manualLinks, raw.cardPowers);
       buildAdjacency();
 

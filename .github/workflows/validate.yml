@@ -20,16 +20,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Syntax check browser graph
-        run: node --check app.js
-      - name: Syntax check vault generator
-        run: node --check scripts/build-vault.mjs
-      - name: Syntax check data updater
-        run: node --check scripts/update-data.mjs
-      - name: Syntax check validator
-        run: node --check scripts/validate-graph.mjs
-      - name: Validate graph data and semantic endpoints
-        run: node scripts/validate-graph.mjs
+          cache: npm
+      - name: Install locked test dependencies
+        run: npm ci --ignore-scripts
+      - name: Check syntax, emitted graph semantics, and website/vault parity
+        run: npm run check
       - name: Build Obsidian vault
         run: node scripts/build-vault.mjs
       - name: Verify generated vault
@@ -43,3 +38,24 @@ jobs:
           name: sts2-bubble-obsidian-vault
           path: vault/
           if-no-files-found: error
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Check graph rendering, keyboard navigation, filters, and mobile behavior
+        run: npm run test:browser
+      - name: Upload browser failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure-traces
+          path: test-results/
+          if-no-files-found: ignore
