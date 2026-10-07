@@ -79,6 +79,8 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
 .toggle-row{margin:6px 0}
 .compact-toggle{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:7px;margin:4px 0}
 .filter-count{font-size:9px;color:#656565;font-variant-numeric:tabular-nums}
+.family-label{display:flex;align-items:center;gap:6px;min-width:0}
+.family-swatch{width:8px;height:8px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 0 1px rgba(255,255,255,.08)}
 .filter-scroll{max-height:150px;overflow:auto;padding-right:4px;scrollbar-width:thin;scrollbar-color:#444 transparent}
 .filter-scroll:empty:after{content:"No relationships";display:block;color:#666;font-size:10px;padding:4px 0}
 .filter-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:16px}
