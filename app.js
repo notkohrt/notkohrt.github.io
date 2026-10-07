@@ -1867,6 +1867,21 @@
 
     $('reset-filters').addEventListener('click', resetFilters);
     $('clear-focus').addEventListener('click', clearFocus);
+    $('copy-link').addEventListener('click', async () => {
+      if (!state.focusedId) return;
+      const url = new URL(window.location.href);
+      url.searchParams.set('node', state.focusedId);
+
+      try {
+        await navigator.clipboard.writeText(url.toString());
+        const button = $('copy-link');
+        const previous = button.textContent;
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = previous; }, 1200);
+      } catch (_) {
+        window.prompt('Copy this node link:', url.toString());
+      }
+    });
     $('fit-graph').addEventListener('click', fitGraph);
     $('zoom-in').addEventListener('click', () => zoomBy(1.18));
     $('zoom-out').addEventListener('click', () => zoomBy(1 / 1.18));
@@ -2030,6 +2045,8 @@
       state.focusedId = null;
       setNodeInUrl(null, true);
       $('clear-focus').disabled = true;
+      $('copy-link').disabled = true;
+      document.title = 'STS2 Bubble — Slay the Spire 2 Interaction Graph';
       $('entity-card').classList.add('hidden');
       $('inspector-empty').classList.remove('hidden');
       $('note-path').textContent = 'No note selected';
@@ -2060,7 +2077,9 @@
 
     state.focusedId = id;
     if (writeUrl) setNodeInUrl(id, false);
+    document.title = node.name + ' — STS2 Bubble';
     $('clear-focus').disabled = false;
+    $('copy-link').disabled = false;
     renderInspector(id);
 
     if (state.viewMode === 'local') {
@@ -2112,7 +2131,9 @@
   function clearFocus(writeUrl = true) {
     state.focusedId = null;
     if (writeUrl) setNodeInUrl(null, false);
+    document.title = 'STS2 Bubble — Slay the Spire 2 Interaction Graph';
     $('clear-focus').disabled = true;
+    $('copy-link').disabled = true;
     $('inspector-panel').classList.remove('open');
 
     $('entity-card').classList.add('hidden');
@@ -2130,10 +2151,12 @@
       edge.provenance === 'derived' ? 'derived' :
       edge.provenance === 'name-match' ? 'matched' : 'text';
 
+    const family = relationFamily(edge.relation);
     return '<div class="relation" data-target="' + htmlEsc(node.id) + '">' +
       '<span class="relation-dot" style="background:' + TYPE_CSS[node.type] + '"></span>' +
       '<div><div class="relation-name">' + htmlEsc(node.name) + '</div>' +
-      '<div class="relation-type">' + htmlEsc(direction + ' · ' + edge.relation) +
+      '<div class="relation-type"><span class="relation-family-dot" style="background:' + RELATION_FAMILY_CSS[family] + '"></span>' +
+      htmlEsc(direction + ' · ' + edge.relation) +
       ' · <span class="relation-provenance">' + htmlEsc(provenance) + '</span></div></div></div>';
   }
 
