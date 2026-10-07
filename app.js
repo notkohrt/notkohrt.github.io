@@ -24,6 +24,30 @@
     other: 'Other'
   };
 
+  const RELATION_FAMILY_COLORS = {
+    creation: 0x72b6d9,
+    application: 0x70b58a,
+    trigger: 0xd5a85f,
+    scaling: 0xb985d6,
+    requirement: 0xd27b72,
+    movement: 0x7f9fd1,
+    modification: 0xc58aa8,
+    resource: 0x8da56e,
+    other: 0x6f747c
+  };
+
+  const RELATION_FAMILY_CSS = {
+    creation: '#72b6d9',
+    application: '#70b58a',
+    trigger: '#d5a85f',
+    scaling: '#b985d6',
+    requirement: '#d27b72',
+    movement: '#7f9fd1',
+    modification: '#c58aa8',
+    resource: '#8da56e',
+    other: '#6f747c'
+  };
+
   const TYPE_COLORS = {
     card: 0x8b83d6,
     relic: 0xc19a63,
@@ -1311,6 +1335,7 @@
       source: edge.source,
       target: edge.target,
       relation: edge.relation,
+      family: relationFamily(edge.relation),
       provenance: edge.provenance
     }));
 
@@ -1421,28 +1446,67 @@
       const target = edge.target;
       if (!source || !target || !Number.isFinite(source.x) || !Number.isFinite(target.x)) continue;
 
-      let color = 0x505050;
-      let alpha = edge.provenance === 'description' ? 0.16 : 0.26;
-      let width = 0.75;
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 1) continue;
+
+      const ux = dx / length;
+      const uy = dy / length;
+      const sourceRadius = source.radius || 4;
+      const targetRadius = target.radius || 4;
+      const startX = source.x + ux * Math.min(sourceRadius + 1, length * 0.25);
+      const startY = source.y + uy * Math.min(sourceRadius + 1, length * 0.25);
+      const endX = target.x - ux * Math.min(targetRadius + 2, length * 0.3);
+      const endY = target.y - uy * Math.min(targetRadius + 2, length * 0.3);
+
+      const family = edge.family || relationFamily(edge.relation);
+      let color = RELATION_FAMILY_COLORS[family] || RELATION_FAMILY_COLORS.other;
+      let alpha = edge.provenance === 'description' ? 0.12 : 0.24;
+      let width = 0.8;
+      let emphasize = false;
 
       if (edge.provenance === 'curated') {
-        color = 0x8978ef;
-        alpha = 0.66;
-        width = 1.3;
+        alpha = 0.7;
+        width = 1.45;
       } else if (edge.provenance === 'explicit') {
-        color = 0x777777;
-        alpha = 0.38;
+        alpha = 0.42;
+        width = 1;
       }
 
-      if (state.focusedId && state.viewMode === 'global') {
+      if (state.focusedId) {
         const touches = source.id === state.focusedId || target.id === state.focusedId;
-        alpha = touches ? Math.max(alpha, 0.76) : 0.025;
-        width = touches ? Math.max(width, 1.15) : 0.55;
+        emphasize = touches;
+        if (state.viewMode === 'global') {
+          alpha = touches ? Math.max(alpha, 0.82) : 0.018;
+          width = touches ? Math.max(width, 1.35) : 0.5;
+        } else if (touches) {
+          alpha = Math.max(alpha, 0.76);
+          width = Math.max(width, 1.25);
+        }
       }
 
       state.edgeLayer.lineStyle(width, color, alpha);
-      state.edgeLayer.moveTo(source.x, source.y);
-      state.edgeLayer.lineTo(target.x, target.y);
+      state.edgeLayer.moveTo(startX, startY);
+      state.edgeLayer.lineTo(endX, endY);
+
+      const showArrow = emphasize || (state.viewMode === 'local' && state.visibleEdges.length <= 90);
+      if (showArrow && alpha > 0.08) {
+        const arrowLength = 7;
+        const arrowWidth = 3.4;
+        const baseX = endX - ux * arrowLength;
+        const baseY = endY - uy * arrowLength;
+        const px = -uy;
+        const py = ux;
+
+        state.edgeLayer.beginFill(color, Math.min(0.9, alpha + 0.08));
+        state.edgeLayer.drawPolygon([
+          endX, endY,
+          baseX + px * arrowWidth, baseY + py * arrowWidth,
+          baseX - px * arrowWidth, baseY - py * arrowWidth
+        ]);
+        state.edgeLayer.endFill();
+      }
     }
   }
 
@@ -1705,7 +1769,8 @@
       .filter(([key]) => familyCounts.has(key))
       .map(([key, label]) =>
         '<label class="toggle-row compact-toggle"><input type="checkbox" data-relation-family="' + htmlEsc(key) + '" checked>' +
-        '<span>' + htmlEsc(label) + '</span><span class="filter-count">' + familyCounts.get(key) + '</span></label>'
+        '<span class="family-label"><span class="family-swatch" style="background:' + RELATION_FAMILY_CSS[key] + '"></span>' +
+        htmlEsc(label) + '</span><span class="filter-count">' + familyCounts.get(key) + '</span></label>'
       ).join('');
 
     $('provenance-filters').querySelectorAll('input').forEach(input => {
