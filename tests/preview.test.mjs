@@ -3,9 +3,19 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { buildPreview } from '../scripts/build-preview.mjs';
+import { buildPreview, renderPreview } from '../scripts/build-preview.mjs';
 import { loadSnapshot } from '../scripts/load-snapshot.mjs';
 import { SOURCES, SOURCE_META_URL } from '../lib/graph-model.mjs';
+
+test('the actual index.html embeds the current source and pinned snapshot with only an asynchronous optional tooltip', async () => {
+  const { html } = await renderPreview({ includeTooltip: true });
+  assert.equal(await readFile(new URL('../index.html', import.meta.url), 'utf8'), html);
+  const scripts = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*>/g)];
+  assert.equal(scripts.length, 1);
+  assert.equal(scripts[0][1], 'https://spire-codex.com/widget/spire-codex-tooltip.js');
+  assert.match(scripts[0][0], /\basync\b/);
+  assert.doesNotMatch(html, /<link\b[^>]*rel="stylesheet"/);
+});
 
 test('standalone preview contains the complete pinned snapshot and builds deterministically', async t => {
   const directory = await mkdtemp(path.join(tmpdir(), 'sts2-preview-'));

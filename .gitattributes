@@ -1,0 +1,2 @@
+# Bundled shader template strings preserve whitespace from the pinned libraries.
+index.html linguist-generated=true whitespace=-blank-at-eol

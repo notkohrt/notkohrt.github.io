@@ -24,7 +24,7 @@ jobs:
           cache: npm
       - name: Install locked test dependencies
         run: npm ci --ignore-scripts
-      - name: Check syntax, emitted graph semantics, and website/vault parity
+      - name: Check generated index, syntax, emitted graph semantics, and website/vault parity
         run: npm run check
       - name: Build standalone preview
         run: npm run build:preview
@@ -34,8 +34,16 @@ jobs:
           name: sts2-bubble-preview
           path: dist/sts2-bubble-preview.html
           if-no-files-found: error
+      - name: Upload the actual self-contained index.html
+        uses: actions/upload-artifact@v4
+        with:
+          name: sts2-bubble-index
+          path: index.html
+          if-no-files-found: error
       - name: Build Obsidian vault
         run: node scripts/build-vault.mjs
+      - name: Check the embedded site matches the vault's curated export
+        run: node scripts/build-site.mjs --check
       - name: Verify generated vault
         run: |
           test -f "vault/Start Here.md"

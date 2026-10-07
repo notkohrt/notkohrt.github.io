@@ -4,7 +4,9 @@ The public graph is intentionally built from a **pinned local snapshot** of Spir
 
 ## Architecture and local development
 
-The website is static HTML/CSS and a browser ES module. Pixi 7.4.2 renders the graph and d3 7.9.0 runs the force simulation; the deployed site has no build step or npm runtime dependency. esbuild is a development dependency for the standalone preview artifact.
+The website is a generated, self-contained `index.html`. It embeds the stylesheet, Pixi 7.4.2, d3 7.9.0, browser code, and pinned JSON snapshot, so an HTML-only preview can render the graph. The optional external tooltip widget loads asynchronously and cannot block graph startup. Deployment still serves static files and needs no npm runtime.
+
+Edit `src/index.html`, `styles.css`, `app.js`, and `lib/` as source files, then run `npm run build:site` to regenerate the root `index.html`. esbuild is an exact, lockfile-pinned development dependency. Generated HTML has a source notice and is marked generated for GitHub diff display. Do not hand-edit the generated file. `npm run check` rebuilds it in memory and rejects any mismatch, including changes to the pinned snapshot or curated links.
 
 Rendering is scheduled on simulation ticks and interaction changes. Settled layouts stop rebuilding edges; opening the quick switcher or hiding the tab pauses simulation work. Camera changes and selection still request a frame.
 
@@ -28,7 +30,14 @@ python3 -m http.server 8000 --bind 127.0.0.1
 
 `package.json` contains development dependencies only. Browser tests use the exact pinned Pixi/d3 distributions from the integrity-checked lockfile and omit the optional tooltip widget, so graph checks are independent of external CDN availability.
 
-Serve the complete checkout over HTTP so the HTML, stylesheet, ES modules, and pinned JSON files are available together. An individual `index.html` file preview cannot run this app. `lib/browser-data.mjs` resolves pinned data relative to the checkout, so hosting at a nested path works as well as hosting at the domain root. Browser checks verify styling and loading under a nested preview path.
+After source or data changes:
+
+```sh
+npm run build:site
+npm run check
+```
+
+The root `index.html` carries all core assets and data with it. Browser checks exercise that exact file with sibling and external requests blocked, including desktop/mobile navigation, tracing, and reload. The source template is build input; `lib/browser-data.mjs` also supports fetching pinned files relative to the checkout. A separate source-mode browser check mounts the template at a nested path and verifies module, styling, and JSON loading.
 
 For a portable preview that can be opened as a single file:
 
@@ -59,8 +68,9 @@ This reads the pinned repository data and existing curated blocks, and writes en
 2. Review upstream game-data changes.
 3. `node scripts/validate-graph.mjs` — verify semantic endpoints and source pinning.
 4. Update semantic parsers/overrides when changed card text requires it.
-5. `node scripts/build-vault.mjs` — regenerate the Obsidian vault.
-6. Review the graph with provenance and relationship-family filters before deployment.
+5. `node scripts/build-vault.mjs` — regenerate the Obsidian vault and export curated links.
+6. `npm run build:site` — regenerate `index.html` from the same shared model and current snapshot/curated links.
+7. Run `npm run check` and browser tests, then review the graph with provenance and relationship-family filters before deployment.
 
 ## Relationship policy
 
@@ -80,8 +90,8 @@ Relationship-family coloring follows the role before the object: “triggers on 
 
 ## Validation
 
-`npm run check` checks every JavaScript module, validates the emitted graph and snapshot metadata, and runs parser/pinned-dataset regressions plus a complete website/vault parity check. Vault tests preserve curated text, compare every generated note's outgoing edges with the website model, and verify deterministic regeneration and safe failure on invalid curated links.
+`npm run check` checks every JavaScript module, validates the emitted graph and snapshot metadata, verifies the committed `index.html` against a deterministic rebuild, and runs parser/pinned-dataset regressions plus a complete website/vault parity check. Vault tests preserve curated text, compare every generated note's outgoing edges with the website model, and verify deterministic regeneration and safe failure on invalid curated links.
 
 The validator rejects duplicate IDs/paths, missing rule and manual endpoints, self edges, bare mentions, generic damage/play hubs, and unpinned metadata. It reports entity/character coverage and relationship-family counts. Some IDs in the upstream `card_powers.json` are absent from its entity lists; these are reported as `unresolved_card_power_mappings`, excluded from emitted edges, and kept separate from validation failures. Review these diagnostics during data updates instead of inventing replacement powers or altering the pinned input.
 
-GitHub Actions runs semantic/vault and geometry checks plus browser checks on pushes to `main`, `feat/sts2-graph-clean`, and `codex/**`, and on pull requests to `main`. Browser checks cover tracing and parallel roles, backlink source text, keyboard focus, filter invalidation, and mobile reading/graph transitions. The scheduled data-refresh workflow runs the same semantic/vault checks before opening a snapshot update PR; parser regressions require review when upstream mechanics change.
+GitHub Actions runs semantic/vault and geometry checks plus browser checks on pushes to `main`, `feat/sts2-graph-clean`, and `codex/**`, and on pull requests to `main`. It uploads the actual root `index.html`, the portable preview, and the generated vault. Browser checks cover self-contained rendering, tracing and parallel roles, backlink source text, keyboard focus, filter invalidation, and mobile reading/graph transitions. The scheduled data-refresh workflow regenerates `index.html` and runs the same semantic/vault checks before opening a snapshot update PR containing both data and generated site; parser regressions require review when upstream mechanics change.

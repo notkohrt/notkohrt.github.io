@@ -1,9 +1,9 @@
 import { test as base, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { buildPreview } from '../scripts/build-preview.mjs';
+import { buildPreview, renderPreview } from '../scripts/build-preview.mjs';
 
 const test = base.extend({
   page: async ({ page }, use) => {
@@ -47,7 +47,7 @@ test('renders the graph and restores a shared note URL', async ({ page }) => {
   await expect(page.locator('#entity-name')).toHaveText('Shiv');
 });
 
-test('loads styling, modules, and pinned data from a nested preview path', async ({ page }) => {
+test('source modules load styling and pinned data from a nested preview path', async ({ page }) => {
   const prefix = '/preview/sts2/';
   const dataRequests = [];
   page.on('request', request => {
@@ -59,6 +59,9 @@ test('loads styling, modules, and pinned data from a nested preview path', async
   await page.route('**' + prefix + '**', async route => {
     const upstream = new URL(route.request().url());
     upstream.pathname = upstream.pathname.slice(prefix.length - 1);
+    if (upstream.pathname === '/') {
+      return route.fulfill({ path: fileURLToPath(new URL('../src/index.html', import.meta.url)), contentType: 'text/html; charset=utf-8' });
+    }
     await route.fulfill({ response: await route.fetch({ url: upstream.href }) });
   });
   await ready(page, prefix + '?node=card:SHIV');
@@ -73,35 +76,63 @@ test('loads styling, modules, and pinned data from a nested preview path', async
   await expect(page.locator('#entity-name')).toHaveText('Resonance');
 });
 
+async function exerciseSingleFile(page, result, optionalRequests = []) {
+  const blocked = [];
+  const preview = 'http://127.0.0.1:8123/__standalone__/index.html';
+  // The managed cloud browser blocks file: URLs. Serve only the generated
+  // HTML response; every attempted sibling asset or external request fails.
+  await page.route(/^https?:/, route => {
+    const request = route.request();
+    if (request.isNavigationRequest() && request.url().split('?')[0] === preview) {
+      return route.fulfill({ path: result.output, contentType: 'text/html; charset=utf-8' });
+    }
+    blocked.push(request.url());
+    return route.abort();
+  });
+  await ready(page, preview + '?node=card:SHIV');
+  await expect(page.locator('#data-count')).toHaveText(result.nodes + ' notes · ' + result.edges + ' links');
+  await expect(page.locator('#entity-name')).toHaveText('Shiv');
+  await find(page, 'Resonance', 'card:RESONANCE');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#inspector-toggle').click();
+  await page.locator('.relation-trace[data-edge-id="card:RESONANCE|power:STRENGTH_POWER|grants"]').click();
+  await expect(page.locator('#connection-caption')).toBeVisible();
+  await expect(page.locator('#connection-caption-text')).toHaveText('Resonance → grants → Strength');
+  await page.reload();
+  await expect(page.locator('#dataset-status')).toHaveClass(/ready/);
+  await expect(page.locator('#entity-name')).toHaveText('Resonance');
+  expect(blocked.filter(url => !optionalRequests.includes(url))).toEqual([]);
+}
+
+test('the actual index.html renders, traces connections, and reloads on mobile with all asset requests blocked', async ({ page }) => {
+  const { nodes, edges } = await renderPreview();
+  await exerciseSingleFile(page, {
+    output: fileURLToPath(new URL('../index.html', import.meta.url)), nodes, edges
+  }, ['https://spire-codex.com/widget/spire-codex-tooltip.js']);
+});
+
+test('index.html remains interactive inside an opaque sandboxed preview iframe', async ({ page }) => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  await page.route(/^https?:/, route => route.abort());
+  await page.setContent('<iframe title="STS2 preview" sandbox="allow-scripts" style="width:1440px;height:1000px;border:0"></iframe>');
+  await page.locator('iframe').evaluate((iframe, content) => { iframe.srcdoc = content; }, html);
+  const frame = page.frames().find(frame => frame.parentFrame());
+  await expect(frame.locator('.app-shell')).toHaveCSS('display', 'grid');
+  await expect(frame.locator('#dataset-status')).toHaveClass(/ready/);
+  await expect(frame.locator('#graph-canvas canvas')).toHaveCount(1);
+  await find(frame, 'Resonance', 'card:RESONANCE');
+  await frame.locator('.relation-trace[data-edge-id="card:RESONANCE|power:STRENGTH_POWER|grants"]').click();
+  await expect(frame.locator('#connection-caption-text')).toHaveText('Resonance → grants → Strength');
+  await frame.getByRole('button', { name: 'Clear connection', exact: true }).click();
+  await frame.locator('#clear-focus').click();
+  await expect(frame.locator('#inspector-empty')).toBeVisible();
+});
+
 test('standalone preview supports desktop and mobile navigation without linked assets or external requests', async ({ page }) => {
   const directory = await mkdtemp(path.join(tmpdir(), 'sts2-preview-browser-'));
   try {
     const result = await buildPreview(path.join(directory, 'preview.html'));
-    const blocked = [];
-    const preview = 'http://127.0.0.1:8123/__standalone__/preview.html';
-    // The managed cloud browser blocks file: URLs. Serve only the generated
-    // HTML response; every attempted sibling asset or external request fails.
-    await page.route(/^https?:/, route => {
-      const request = route.request();
-      if (request.isNavigationRequest() && request.url().split('?')[0] === preview) {
-        return route.fulfill({ path: result.output, contentType: 'text/html; charset=utf-8' });
-      }
-      blocked.push(request.url());
-      return route.abort();
-    });
-    await ready(page, preview + '?node=card:SHIV');
-    await expect(page.locator('#data-count')).toHaveText(result.nodes + ' notes · ' + result.edges + ' links');
-    await expect(page.locator('#entity-name')).toHaveText('Shiv');
-    await find(page, 'Resonance', 'card:RESONANCE');
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.locator('#inspector-toggle').click();
-    await page.locator('.relation-trace[data-edge-id="card:RESONANCE|power:STRENGTH_POWER|grants"]').click();
-    await expect(page.locator('#connection-caption')).toBeVisible();
-    await expect(page.locator('#connection-caption-text')).toHaveText('Resonance → grants → Strength');
-    await page.reload();
-    await expect(page.locator('#dataset-status')).toHaveClass(/ready/);
-    await expect(page.locator('#entity-name')).toHaveText('Resonance');
-    expect(blocked).toEqual([]);
+    await exerciseSingleFile(page, result);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -289,10 +320,18 @@ test('zero-cost cards can be filtered and upgrade values preserve their signs an
 });
 
 test('missing snapshot metadata fails visibly instead of losing provenance silently', async ({ page }) => {
-  await page.route('**/data/sts2/meta.json', route => route.fulfill({ status: 404, body: 'Missing snapshot' }));
+  await page.route('http://127.0.0.1:8123/', async route => {
+    const response = await route.fetch();
+    const html = (await response.text()).replace(/(<script id="sts2-snapshot" type="application\/json">)([\s\S]*?)(<\/script>)/, (_match, start, json, end) => {
+      const snapshot = JSON.parse(json);
+      delete snapshot['data/sts2/meta.json'];
+      return start + JSON.stringify(snapshot).replace(/</g, '\\u003c') + end;
+    });
+    await route.fulfill({ response, body: html });
+  });
   await page.goto('/');
   await expect(page.locator('#dataset-status')).toHaveText('Data unavailable');
-  await expect(page.locator('#loading-state')).toContainText('/data/sts2/meta.json');
+  await expect(page.locator('#loading-state')).toContainText('data/sts2/meta.json');
   await expect(page.locator('#loading-state')).toBeVisible();
 });
 

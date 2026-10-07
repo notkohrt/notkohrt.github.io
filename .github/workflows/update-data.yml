@@ -39,6 +39,7 @@ jobs:
       - name: Validate refreshed graph
         if: steps.diff.outputs.changed == 'true'
         run: |
+          npm run build:site
           npm run check
           node scripts/build-vault.mjs --output "$RUNNER_TEMP/sts2-vault"
 
@@ -52,7 +53,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
-          git add data/sts2
+          git add data/sts2 index.html
           git commit -m "Refresh pinned STS2 data snapshot"
           git push origin "$BRANCH"
           gh pr create \
