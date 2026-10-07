@@ -58,6 +58,12 @@
     effect: 'Effects'
   };
 
+  const CARD_TYPE_MECHANICS = [
+    { id:'CARD_TYPE_ATTACK', name:'Attack Cards', description:'Cards with the Attack type.' },
+    { id:'CARD_TYPE_SKILL', name:'Skill Cards', description:'Cards with the Skill type.' },
+    { id:'CARD_TYPE_POWER', name:'Power Cards', description:'Cards with the Power type.' }
+  ];
+
   const EFFECT_DEFS = [
     { id:'DRAW', name:'Draw', description:'Draw cards from the Draw Pile into the Hand.', patterns:[/\bdraw(?:s|n)?\b(?!\s+pile)/i], relation:'draws' },
     { id:'DISCARD', name:'Discard', description:'Move cards from the Hand to the Discard Pile.', patterns:[/\bdiscard(?:s|ed|ing)?\b(?!\s+pile)/i], relation:'discards' },
@@ -246,6 +252,18 @@
       }
     }
 
+    for (const item of CARD_TYPE_MECHANICS) {
+      nodes.push({
+        id: nodeId('mechanic', item.id),
+        sourceId: item.id,
+        type: 'mechanic',
+        name: item.name,
+        description: item.description,
+        mechanicGroup: 'card_types',
+        systemDerived: true
+      });
+    }
+
     const tags = new Set();
     for (const card of raw.card) {
       for (const tag of card.tags || []) tags.add(tag);
@@ -417,6 +435,12 @@
       return 'plays cards';
     }
 
+    if (effectId === 'CREATE_CARD') {
+      if (/\bcopy\s+of\s+this\s+card\b/.test(t)) return 'creates copy of self';
+      if (/\bcopy\b[^.\n]{0,36}\binto\s+your\s+hand\b/.test(t)) return 'creates copy';
+      return fallback;
+    }
+
     if (effectId === 'DAMAGE') {
       if (/\b(?:additional|double|more|less)\s+damage\b|\bdamage\b[^.\n]{0,28}\b(?:increased|reduced|doubled)\b/.test(t)) return 'modifies damage';
       if (/\btake(?:s)?\b[^.\n]{0,28}\bdamage\b/.test(t)) return 'takes damage';
@@ -541,6 +565,93 @@
     ['relic:PAPER_PHROG', 'effect:DAMAGE', ['increases damage vs Vulnerable']],
     ['relic:BRIMSTONE', 'power:STRENGTH_POWER', ['grants to self & enemies']]
   ];
+
+  function addCardTypeRelations(source, text, pushEdge) {
+    const t = norm(text);
+    const attack = nodeId('mechanic','CARD_TYPE_ATTACK');
+    const skill = nodeId('mechanic','CARD_TYPE_SKILL');
+    const power = nodeId('mechanic','CARD_TYPE_POWER');
+
+    if (/\bwhenever\b[^.\n]{0,42}\bplay\s+an?\s+attack\b/.test(t)) {
+      pushEdge(source.id, attack, 'triggers on Attack play', 'derived');
+    }
+    if (/\bfirst\b[^.\n]{0,34}\battack\b[^.\n]{0,30}\bplay/.test(t)) {
+      pushEdge(source.id, attack, 'triggers on Attack play', 'derived');
+    }
+    if (/\bnext\s+attack\b[^.\n]{0,44}\bplayed\s+an\s+(?:extra|additional)\s+time\b/.test(t)) {
+      pushEdge(source.id, attack, 'repeats next Attack', 'derived');
+    }
+    if (/\bnext\s+attack\b[^.\n]{0,44}\bcosts?\s+0\b/.test(t)) {
+      pushEdge(source.id, attack, 'modifies next Attack cost', 'derived');
+    }
+    if (/\bfor each\s+attack\b[^.\n]{0,30}\bin your hand\b/.test(t)) {
+      pushEdge(source.id, attack, 'scales with Attacks in hand', 'derived');
+    }
+    if (/\bfor each\s+attack\b[^.\n]{0,30}\bplayed\b/.test(t) || /\bfor each\s+attack\s+played\b/.test(t)) {
+      pushEdge(source.id, attack, 'scales with Attacks played', 'derived');
+    }
+    if (/\bcosts?\s+\d+\s+less\b[^.\n]{0,34}\bfor each attack played\b/.test(t)) {
+      pushEdge(source.id, attack, 'scales cost with Attacks played', 'derived');
+    }
+    if (/\brandom\s+attack\b[^.\n]{0,42}\bdiscard pile\b[^.\n]{0,42}\bhand\b/.test(t)) {
+      pushEdge(source.id, attack, 'moves Attack from Discard to Hand', 'derived');
+    }
+    if (/\badd\b[^.\n]{0,28}\brandom\s+attack\b[^.\n]{0,34}\bhand\b/.test(t)) {
+      pushEdge(source.id, attack, 'creates', 'derived');
+    }
+    if (/\btransform\s+all\s+attacks\b/.test(t)) {
+      pushEdge(source.id, attack, 'transforms Attacks', 'derived');
+    }
+    if (/\bdraw\s+cards\s+until\s+you\s+draw\s+a\s+non-attack\b/.test(t)) {
+      pushEdge(source.id, attack, 'draw condition', 'derived');
+    }
+    if (/\brandom\s+attack\b[^.\n]{0,28}\bis played\b/.test(t)) {
+      pushEdge(source.id, attack, 'plays Attack', 'derived');
+    }
+
+    if (/\bskills?\s+cost\s+0\b/.test(t)) {
+      pushEdge(source.id, skill, 'modifies Skill cost', 'derived');
+    }
+    if (/\bwhenever\b[^.\n]{0,38}\bplay\s+a\s+skill\b[^.\n]{0,38}\bexhaust\b/.test(t)) {
+      pushEdge(source.id, skill, 'exhausts Skills on play', 'derived');
+    }
+    if (/\bnext\s+skill\b[^.\n]{0,42}\bplayed\s+an\s+(?:extra|additional)\s+time\b/.test(t)) {
+      pushEdge(source.id, skill, 'repeats next Skill', 'derived');
+    }
+    if (/\bwhen\b[^.\n]{0,36}\bplay\s+a\s+skill\b/.test(t)) {
+      pushEdge(source.id, skill, 'triggers on Skill play', 'derived');
+    }
+    if (/\badd\s+sly\s+to\s+a\s+skill\b/.test(t)) {
+      pushEdge(source.id, skill, 'modifies Skill', 'derived');
+    }
+    if (/\bfor each\s+skill\s+played\b/.test(t)) {
+      pushEdge(source.id, skill, 'scales with Skills played', 'derived');
+    }
+    if (/\bdraw\s+a\s+skill\b/.test(t)) {
+      pushEdge(source.id, skill, 'requires drawn Skill', 'derived');
+    }
+
+    if (/\bwhenever\b[^.\n]{0,38}\bplay\s+a\s+power\b/.test(t)) {
+      pushEdge(source.id, power, 'triggers on Power play', 'derived');
+    }
+    if (/\bnext\s+power\b[^.\n]{0,42}\bplayed\s+an\s+(?:extra|additional)\s+time\b/.test(t)) {
+      pushEdge(source.id, power, 'repeats next Power', 'derived');
+    }
+  }
+
+  function addTagSemanticRelations(source, text, pushEdge) {
+    const t = norm(text);
+
+    if (/\bcontaining\s+[“"]?strike[”"]?\b/.test(t) || /\bcards?\b[^.\n]{0,24}\bstrike\b/.test(t)) {
+      const strike = nodeId('tag','STRIKE');
+
+      if (/\bfor\s+(?:all|each)\b[^.\n]{0,42}\bstrike\b/.test(t)) {
+        pushEdge(source.id, strike, 'scales with Strike cards', 'derived');
+      } else if (/\bdraw\b[^.\n]{0,42}\bstrike\b/.test(t)) {
+        pushEdge(source.id, strike, 'triggers on drawing Strike', 'derived');
+      }
+    }
+  }
 
   function buildEdges(nodes, manualLinks, cardPowers) {
     const edges = [];
