@@ -1,0 +1,9 @@
+{
+  "source_repository": "nkhoit/spire-archive",
+  "source_commit": "4e6b0e040ccd00eb04fb1ab7fb0b298c222d2f29",
+  "snapshot_date": "2026-10-06",
+  "game_data_version": "0.107.1",
+  "game_data_date": "2026-06-18",
+  "source_path": "data/sts2",
+  "note": "Pinned source snapshot used by STS2 Bubble."
+}
