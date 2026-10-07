@@ -604,6 +604,71 @@
     ['relic:BRIMSTONE', 'power:STRENGTH_POWER', ['grants to self & enemies']]
   ];
 
+  const DEFECT_SEMANTIC_OVERRIDES = [
+    ['card:BIASED_COGNITION', 'power:FOCUS_POWER', ['grants', 'reduces over time']],
+    ['relic:DATA_DISK', 'power:FOCUS_POWER', ['grants']],
+    ['card:BULK_UP', 'mechanic:ORB_SLOTS', ['reduces']],
+    ['card:CAPACITOR', 'mechanic:ORB_SLOTS', ['grants']],
+    ['card:MODDED', 'mechanic:ORB_SLOTS', ['grants']],
+    ['relic:RUNIC_CAPACITOR', 'mechanic:ORB_SLOTS', ['grants']],
+    ['card:BARRAGE', 'mechanic:ORB_SYSTEM', ['scales with Channeled Orbs']],
+    ['card:COMPILE_DRIVER', 'mechanic:ORB_SYSTEM', ['scales with unique Orbs']],
+    ['card:COOLANT', 'mechanic:ORB_SYSTEM', ['scales with unique Orbs']],
+    ['card:SYNCHRONIZE', 'mechanic:ORB_SYSTEM', ['scales with unique Orbs']],
+    ['card:LOOP', 'mechanic:ORB_SYSTEM', ['triggers passive']],
+    ['relic:EMOTION_CHIP', 'effect:LOSE_HP', ['requires HP loss']],
+    ['relic:EMOTION_CHIP', 'mechanic:ORB_SYSTEM', ['triggers passive']],
+    ['relic:GOLD_PLATED_CABLES', 'mechanic:ORB_SYSTEM', ['triggers passive']],
+    ['relic:METRONOME', 'mechanic:ORB_SYSTEM', ['triggers after 7 Channels']],
+    ['card:DARKNESS', 'mechanic:DARK', ['channels', 'triggers passive']],
+    ['card:THUNDER', 'mechanic:LIGHTNING', ['triggers on Evoke']],
+    ['card:VOLTAIC', 'mechanic:LIGHTNING', ['scales with previously Channeled']]
+  ];
+
+  const NECROBINDER_SEMANTIC_OVERRIDES = [
+    ['card:DEATHS_DOOR', 'power:DOOM_POWER', ['requires Doom application']],
+    ['card:END_OF_DAYS', 'power:DOOM_POWER', ['applies', 'kills at Doom ≥ HP']],
+    ['card:NO_ESCAPE', 'power:DOOM_POWER', ['applies', 'scales with existing Doom']],
+    ['card:TIMES_UP', 'power:DOOM_POWER', ['scales with Doom']],
+    ['card:SHROUD', 'power:DOOM_POWER', ['triggers on Doom application']],
+    ['card:REAPER_FORM', 'power:DOOM_POWER', ['applies from Attack damage']],
+    ['relic:BOOK_REPAIR_KNIFE', 'power:DOOM_POWER', ['triggers on Doom kill']],
+    ['relic:UNDYING_SIGIL', 'power:DOOM_POWER', ['modifies damage at Doom ≥ HP']],
+    ['card:DEVOUR_LIFE', 'card:SOUL', ['triggers on Soul play']],
+    ['card:HAUNT', 'card:SOUL', ['triggers on Soul play']],
+    ['card:SOUL_STORM', 'card:SOUL', ['scales with Souls in Exhaust Pile']],
+    ['card:SEANCE', 'card:SOUL', ['transforms into']],
+    ['relic:BONE_FLUTE', 'mechanic:OSTY', ['triggers on attack']],
+    ['card:NECRO_MASTERY', 'mechanic:OSTY', ['triggers on HP loss']],
+    ['card:BONE_SHARDS', 'mechanic:OSTY', ['requires alive', 'sacrifices']],
+    ['card:SACRIFICE', 'mechanic:OSTY', ['requires alive', 'sacrifices']],
+    ['card:FLATTEN', 'mechanic:OSTY', ['requires prior attack']],
+    ['card:SQUEEZE', 'mechanic:OSTY', ['scales with Osty Attacks']],
+    ['card:PROTECTOR', 'mechanic:OSTY', ['scales with Max HP']],
+    ['card:UNLEASH', 'mechanic:OSTY', ['scales with HP']],
+    ['card:SIC_EM', 'mechanic:OSTY', ['triggers on hit']]
+  ];
+
+  const REGENT_SEMANTIC_OVERRIDES = [
+    ['card:CRESCENT_SPEAR', 'mechanic:STAR_COUNT', ['scales with Star-cost cards']],
+    ['card:RADIATE', 'mechanic:STAR_COUNT', ['scales with Stars gained']],
+    ['card:CHILD_OF_THE_STARS', 'mechanic:STAR_COUNT', ['triggers on Stars spent', 'scales with Stars spent']],
+    ['relic:GALACTIC_DUST', 'mechanic:STAR_COUNT', ['scales with Stars spent']],
+    ['relic:MINI_REGENT', 'mechanic:STAR_COUNT', ['triggers on Stars spent']],
+    ['card:CONQUEROR', 'card:SOVEREIGN_BLADE', ['modifies damage']],
+    ['card:PARRY', 'card:SOVEREIGN_BLADE', ['grants Block']],
+    ['card:SEEKING_EDGE', 'card:SOVEREIGN_BLADE', ['modifies target scope']],
+    ['card:SWORD_SAGE', 'card:SOVEREIGN_BLADE', ['grants Replay']],
+    ['card:SUMMON_FORTH', 'card:SOVEREIGN_BLADE', ['moves to Hand']],
+    ['card:I_AM_INVINCIBLE', 'mechanic:DRAW_PILE', ['plays from top']],
+    ['card:FOREGONE_CONCLUSION', 'mechanic:DRAW_PILE', ['moves from']],
+    ['card:GLIMMER', 'mechanic:DRAW_PILE', ['moves to']],
+    ['card:PHOTON_CUT', 'mechanic:DRAW_PILE', ['moves to']],
+    ['card:SHINING_STRIKE', 'mechanic:DRAW_PILE', ['moves to']],
+    ['card:HEIRLOOM_HAMMER', 'mechanic:CARD_TYPE_COLORLESS', ['copies Colorless card']],
+    ['relic:VITRUVIAN_MINION', 'tag:MINION', ['modifies Minion cards']]
+  ];
+
   function addCardTypeRelations(source, text, pushEdge) {
     const t = norm(text);
     const attack = nodeId('mechanic','CARD_TYPE_ATTACK');
@@ -946,7 +1011,13 @@
       ['keyword:SLY', 'effect:DISCARD', 'triggers when discarded'],
       ['effect:HEAL', 'mechanic:HIT_POINTS', 'restores'],
       ['effect:LOSE_HP', 'mechanic:HIT_POINTS', 'reduces'],
-      ['effect:COST_CHANGE', 'mechanic:ENERGY', 'modifies cost']
+      ['effect:COST_CHANGE', 'mechanic:ENERGY', 'modifies cost'],
+      ['power:FOCUS_POWER', 'mechanic:ORB_SYSTEM', 'modifies effectiveness'],
+      ['mechanic:ORB_SLOTS', 'mechanic:ORB_SYSTEM', 'sets capacity'],
+      ['mechanic:SUMMON', 'mechanic:OSTY', 'summons / strengthens'],
+      ['mechanic:FORGE', 'card:SOVEREIGN_BLADE', 'modifies damage'],
+      ['mechanic:FORGE', 'card:SOVEREIGN_BLADE', 'creates on first Forge'],
+      ['mechanic:REPLAY', 'effect:PLAY_CARD', 'repeats card play']
     ];
 
     for (const [source, target, relation] of ontologyEdges) {
@@ -962,7 +1033,13 @@
       }
     }
 
-    for (const [source, target, relations] of [...SILENT_SEMANTIC_OVERRIDES, ...IRONCLAD_SEMANTIC_OVERRIDES]) {
+    for (const [source, target, relations] of [
+      ...SILENT_SEMANTIC_OVERRIDES,
+      ...IRONCLAD_SEMANTIC_OVERRIDES,
+      ...DEFECT_SEMANTIC_OVERRIDES,
+      ...NECROBINDER_SEMANTIC_OVERRIDES,
+      ...REGENT_SEMANTIC_OVERRIDES
+    ]) {
       if (!byId.has(source) || !byId.has(target)) continue;
 
       for (let i = edges.length - 1; i >= 0; i -= 1) {
