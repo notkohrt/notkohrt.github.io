@@ -7,14 +7,14 @@ const VAULT = path.join(ROOT, 'vault');
 const MANUAL_LINKS_PATH = path.join(ROOT, 'data', 'manual-links.json');
 
 const SOURCES = {
-  card: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/cards.json',
-  relic: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/relics.json',
-  power: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/powers.json',
-  potion: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/potions.json',
-  enchantment: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/enchantments.json',
-  keyword: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/keywords.json',
-  mechanics: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/mechanics.json',
-  cardPowers: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/card_powers.json'
+  card: 'data/sts2/cards.json',
+  relic: 'data/sts2/relics.json',
+  power: 'data/sts2/powers.json',
+  potion: 'data/sts2/potions.json',
+  enchantment: 'data/sts2/enchantments.json',
+  keyword: 'data/sts2/keywords.json',
+  mechanics: 'data/sts2/mechanics.json',
+  cardPowers: 'data/sts2/card_powers.json'
 };
 
 const FOLDERS = {
@@ -79,10 +79,15 @@ function yaml(value) {
   return JSON.stringify(value ?? '');
 }
 
-async function load(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error('Failed to load ' + url + ': ' + response.status);
-  return response.json();
+async function load(source) {
+  if (/^https?:\/\//i.test(source)) {
+    const response = await fetch(source);
+    if (!response.ok) throw new Error('Failed to load ' + source + ': ' + response.status);
+    return response.json();
+  }
+
+  const file = path.join(ROOT, source);
+  return JSON.parse(await readFile(file, 'utf8'));
 }
 
 function normalizeData(raw) {
