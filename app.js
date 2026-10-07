@@ -505,8 +505,24 @@
       }
     }
 
-    // Discard Pile mentions are ignored here unless a specific move/play
-    // relationship is supplied by a high-confidence parser or curated override.
+    if (/\bfrom\s+(?:your\s+)?discard\s+pile\b[^.\n]{0,52}\b(?:hand|draw\s+pile)\b/i.test(text) ||
+        /\bput\b[^.\n]{0,46}\bdiscard\s+pile\b[^.\n]{0,46}\b(?:hand|draw\s+pile)\b/i.test(text)) {
+      pushEdge(source.id, nodeId('mechanic','DISCARD_PILE'), 'moves from', 'derived');
+    }
+    if (/\bdiscard\s+pile\b[^.\n]{0,60}\bdraw\s+pile\b/i.test(text)) {
+      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'moves to', 'derived');
+    }
+    if (/\bfrom\s+(?:your\s+)?draw\s+pile\b[^.\n]{0,52}\bhand\b/i.test(text) ||
+        /\bput\b[^.\n]{0,46}\bdraw\s+pile\b[^.\n]{0,46}\bhand\b/i.test(text)) {
+      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'moves from', 'derived');
+    }
+    if (/\bfrom\s+(?:your\s+)?hand\b[^.\n]{0,52}\b(?:top of )?(?:your\s+)?draw\s+pile\b/i.test(text) ||
+        /\bput\b[^.\n]{0,38}\bhand\b[^.\n]{0,46}\bdraw\s+pile\b/i.test(text)) {
+      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'moves to', 'derived');
+    }
+    if (/\bplay\b[^.\n]{0,46}\bfrom\s+(?:your\s+)?draw\s+pile\b|\bplay\s+the\s+top\b[^.\n]{0,34}\bdraw\s+pile\b/i.test(text)) {
+      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'plays from', 'derived');
+    }
 
     if (/\bexhaust\s+pile\b/i.test(text)) {
       let relation = null;
@@ -663,7 +679,8 @@
     const status = nodeId('mechanic','CARD_TYPE_STATUS');
     const colorless = nodeId('mechanic','CARD_TYPE_COLORLESS');
 
-    if (/\b(?:create|creates|created)\s+(?:a\s+)?status\b/.test(t)) pushEdge(source.id, status, 'creates Status', 'derived');
+    if (/\b(?:whenever|when|each time)\b[^.\n]{0,48}\bcreate(?:s|d|ing)?\s+(?:a\s+)?status\b/.test(t)) pushEdge(source.id, status, 'triggers on Status creation', 'derived');
+    else if (/\b(?:create|creates|created)\s+(?:a\s+)?status\b/.test(t)) pushEdge(source.id, status, 'creates Status', 'derived');
     if (/\bexhaust\s+(?:all\s+)?(?:your\s+)?status\s+cards?\b/.test(t)) pushEdge(source.id, status, 'exhausts Status cards', 'derived');
     if (/\bdraw\s+(?:a\s+)?status\b/.test(t)) pushEdge(source.id, status, 'triggers on Status draw', 'derived');
     if (/\btransform\s+(?:all\s+)?status\s+cards?\b/.test(t)) pushEdge(source.id, status, 'transforms Status cards', 'derived');
@@ -754,8 +771,8 @@
 
     if (/\[s\]/.test(t)) {
       let relation = 'uses Stars';
-      if (/\bwhenever\b[^.\n]{0,40}\b(?:spend|gain)\b[^.\n]{0,18}\[s\]/.test(t)) relation = 'triggers on Stars';
-      else if (/\bfor each\b[^.\n]{0,42}\[s\]/.test(t) || /\[s\]\s+cost/.test(t)) relation = 'scales with Stars';
+      if (/\bwhenever\s+you\s+(?:spend|gain)\b[^.\n]{0,22}\[s\]/.test(t) || /\bfirst time\s+you\s+spend\b[^.\n]{0,22}\[s\]/.test(t)) relation = 'triggers on Stars';
+      else if (/\bfor (?:each|every)\b[^.\n]{0,42}\[s\]/.test(t) || /\[s\]\s+cost/.test(t) || /\beach\s+\[s\]\s+spent\b/.test(t)) relation = 'scales with Stars';
       else if (/\bspend\b[^.\n]{0,24}\[s\]/.test(t)) relation = 'spends Stars';
       else if (/\bgain\b[^.\n]{0,30}\[s\]/.test(t)) relation = 'gains Stars';
       pushEdge(source.id, stars, relation, 'derived');
@@ -776,7 +793,25 @@
       'mechanic:HIT_POINTS',
       'mechanic:DRAW_PILE',
       'mechanic:DISCARD_PILE',
-      'mechanic:EXHAUST_PILE'
+      'mechanic:EXHAUST_PILE',
+      'mechanic:ORB_SYSTEM',
+      'mechanic:ORB_SLOTS',
+      'mechanic:OSTY',
+      'mechanic:SUMMON',
+      'mechanic:FORGE',
+      'mechanic:REPLAY',
+      'mechanic:FATAL',
+      'mechanic:STAR_COUNT',
+      'mechanic:CARD_TYPE_ATTACK',
+      'mechanic:CARD_TYPE_SKILL',
+      'mechanic:CARD_TYPE_POWER',
+      'mechanic:CARD_TYPE_STATUS',
+      'mechanic:CARD_TYPE_COLORLESS',
+      'mechanic:LIGHTNING',
+      'mechanic:FROST',
+      'mechanic:DARK',
+      'mechanic:PLASMA',
+      'mechanic:GLASS'
     ]);
 
     for (const candidate of nodes.filter(n =>
