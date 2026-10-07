@@ -1,13 +1,27 @@
 (() => {
   const SOURCES = {
-    card: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/cards.json',
-    relic: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/relics.json',
-    power: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/powers.json',
-    potion: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/potions.json',
-    enchantment: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/enchantments.json',
-    keyword: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/keywords.json',
-    mechanics: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/mechanics.json',
-    cardPowers: 'https://raw.githubusercontent.com/nkhoit/spire-archive/main/data/sts2/card_powers.json'
+    card: '/data/sts2/cards.json',
+    relic: '/data/sts2/relics.json',
+    power: '/data/sts2/powers.json',
+    potion: '/data/sts2/potions.json',
+    enchantment: '/data/sts2/enchantments.json',
+    keyword: '/data/sts2/keywords.json',
+    mechanics: '/data/sts2/mechanics.json',
+    cardPowers: '/data/sts2/card_powers.json'
+  };
+
+  const SOURCE_META_URL = '/data/sts2/meta.json';
+
+  const RELATION_FAMILY_LABELS = {
+    creation: 'Create / transform',
+    application: 'Apply / grant',
+    trigger: 'Triggers / payoffs',
+    scaling: 'Scaling',
+    requirement: 'Requirements',
+    movement: 'Move / play',
+    modification: 'Modify / retain',
+    resource: 'Resources / actions',
+    other: 'Other'
   };
 
   const TYPE_COLORS = {
@@ -117,6 +131,9 @@
     viewMode: 'global',
     depth: 1,
     visibleTypes: new Set(Object.keys(TYPE_LABELS)),
+    visibleProvenance: new Set(),
+    visibleRelationFamilies: new Set(),
+    datasetMeta: {},
 
     paletteIndex: 0,
     paletteMatches: [],
@@ -1644,6 +1661,87 @@
     ).join('');
   }
 
+  function relationFamily(relation) {
+    const r = norm(relation);
+
+    if (/create|copy|transform/.test(r)) return 'creation';
+    if (/appl|grant|restore|heal|increase|max hp/.test(r)) return 'application';
+    if (/trigger|benefit/.test(r)) return 'trigger';
+    if (/scale|equal to/.test(r)) return 'scaling';
+    if (/require|restrict|condition/.test(r)) return 'requirement';
+    if (/move|play from|plays from|moves to|moves from|return/.test(r)) return 'movement';
+    if (/modif|reduce|remove|retain|double|repeat|forg|target scope|sets capacity/.test(r)) return 'modification';
+    if (/draw|discard|exhaust|channel|evoke|summon|spend|consume|lose hp|self-exhaust/.test(r)) return 'resource';
+    return 'other';
+  }
+
+  function edgePassesFilters(edge) {
+    if (state.visibleProvenance.size && !state.visibleProvenance.has(edge.provenance || 'description')) return false;
+    if (state.visibleRelationFamilies.size && !state.visibleRelationFamilies.has(relationFamily(edge.relation))) return false;
+    return true;
+  }
+
+  function renderEdgeFilters() {
+    const provenanceCounts = new Map();
+    const familyCounts = new Map();
+
+    for (const edge of state.edges) {
+      const provenance = edge.provenance || 'description';
+      const family = relationFamily(edge.relation);
+      provenanceCounts.set(provenance, (provenanceCounts.get(provenance) || 0) + 1);
+      familyCounts.set(family, (familyCounts.get(family) || 0) + 1);
+    }
+
+    const provenances = [...provenanceCounts.keys()].sort();
+    state.visibleProvenance = new Set(provenances);
+    state.visibleRelationFamilies = new Set(Object.keys(RELATION_FAMILY_LABELS).filter(key => familyCounts.has(key)));
+
+    $('provenance-filters').innerHTML = provenances.map(value =>
+      '<label class="toggle-row compact-toggle"><input type="checkbox" data-provenance="' + htmlEsc(value) + '" checked>' +
+      '<span>' + htmlEsc(value) + '</span><span class="filter-count">' + provenanceCounts.get(value) + '</span></label>'
+    ).join('');
+
+    $('relation-filters').innerHTML = Object.entries(RELATION_FAMILY_LABELS)
+      .filter(([key]) => familyCounts.has(key))
+      .map(([key, label]) =>
+        '<label class="toggle-row compact-toggle"><input type="checkbox" data-relation-family="' + htmlEsc(key) + '" checked>' +
+        '<span>' + htmlEsc(label) + '</span><span class="filter-count">' + familyCounts.get(key) + '</span></label>'
+      ).join('');
+
+    $('provenance-filters').querySelectorAll('input').forEach(input => {
+      input.addEventListener('change', () => {
+        if (input.checked) state.visibleProvenance.add(input.dataset.provenance);
+        else state.visibleProvenance.delete(input.dataset.provenance);
+        applyFilters(true);
+        if (state.focusedId) renderInspector(state.focusedId);
+      });
+    });
+
+    $('relation-filters').querySelectorAll('input').forEach(input => {
+      input.addEventListener('change', () => {
+        if (input.checked) state.visibleRelationFamilies.add(input.dataset.relationFamily);
+        else state.visibleRelationFamilies.delete(input.dataset.relationFamily);
+        applyFilters(true);
+        if (state.focusedId) renderInspector(state.focusedId);
+      });
+    });
+  }
+
+  function setNodeInUrl(id, replace) {
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set('node', id);
+    else url.searchParams.delete('node');
+    const stateValue = id ? { node: id } : {};
+    if (replace) window.history.replaceState(stateValue, '', url);
+    else window.history.pushState(stateValue, '', url);
+  }
+
+  function syncFocusFromUrl() {
+    const id = new URL(window.location.href).searchParams.get('node');
+    if (id && state.byId.has(id)) focusNode(id, false);
+    else clearFocus(false);
+  }
+
   function optionize(el, values, formatter) {
     formatter = formatter || (v => v);
     const first = el.options[0].outerHTML;
@@ -1658,6 +1756,7 @@
   function setupControls() {
     renderTypeFilters();
     renderLegend();
+    renderEdgeFilters();
 
     optionize($('color-filter'), [...new Set(state.nodes.map(n => n.color).filter(Boolean))]);
     optionize(
@@ -1718,6 +1817,8 @@
     });
     $('palette-input').addEventListener('input', updatePalette);
     $('palette-input').addEventListener('keydown', handlePaletteKeys);
+
+    window.addEventListener('popstate', syncFocusFromUrl);
 
     document.addEventListener('keydown', e => {
       const ctrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k';
@@ -1783,6 +1884,7 @@
       for (const id of frontier) {
         if (outgoing) {
           for (const edge of state.outAdj.get(id) || []) {
+            if (!edgePassesFilters(edge)) continue;
             if (baseAllowed.has(edge.target) && !found.has(edge.target)) {
               found.add(edge.target);
               next.add(edge.target);
@@ -1792,6 +1894,7 @@
 
         if (incoming) {
           for (const edge of state.inAdj.get(id) || []) {
+            if (!edgePassesFilters(edge)) continue;
             if (baseAllowed.has(edge.source) && !found.has(edge.source)) {
               found.add(edge.source);
               next.add(edge.source);
@@ -1809,6 +1912,7 @@
 
   function applyFilters(shouldFit) {
     const baseAllowed = new Set(state.nodes.filter(matchesFilters).map(n => n.id));
+    const eligibleEdges = state.edges.filter(edgePassesFilters);
     let visible = new Set(baseAllowed);
 
     const color = $('color-filter').value;
@@ -1822,7 +1926,7 @@
 
       visible = new Set(seeds);
 
-      for (const edge of state.edges) {
+      for (const edge of eligibleEdges) {
         let otherId = null;
 
         if (seeds.has(edge.source)) otherId = edge.target;
@@ -1843,7 +1947,7 @@
       visible = collectLocal(state.focusedId, visible);
     }
 
-    let visibleEdges = state.edges.filter(e => visible.has(e.source) && visible.has(e.target));
+    let visibleEdges = eligibleEdges.filter(e => visible.has(e.source) && visible.has(e.target));
 
     if ($('isolated-filter').checked && !$('search-input').value && state.viewMode === 'global') {
       const connected = new Set();
@@ -1854,7 +1958,7 @@
       }
 
       visible = new Set([...visible].filter(id => connected.has(id) || id === state.focusedId));
-      visibleEdges = state.edges.filter(e => visible.has(e.source) && visible.has(e.target));
+      visibleEdges = eligibleEdges.filter(e => visible.has(e.source) && visible.has(e.target));
     }
 
     if (state.focusedId && !visible.has(state.focusedId)) {
@@ -1884,11 +1988,12 @@
     for (const node of state.visibleNodes) styleNodeView(node);
   }
 
-  function focusNode(id) {
+  function focusNode(id, writeUrl = true) {
     const node = state.byId.get(id);
     if (!node) return;
 
     state.focusedId = id;
+    if (writeUrl) setNodeInUrl(id, false);
     $('clear-focus').disabled = false;
     renderInspector(id);
 
@@ -1938,8 +2043,9 @@
     );
   }
 
-  function clearFocus() {
+  function clearFocus(writeUrl = true) {
     state.focusedId = null;
+    if (writeUrl) setNodeInUrl(null, false);
     $('clear-focus').disabled = true;
     $('inspector-panel').classList.remove('open');
 
@@ -2028,15 +2134,15 @@
       $('upgrade-card').innerHTML = '';
     }
 
-    const outgoing = (state.outAdj.get(id) || []).map(edge => ({
-      edge,
-      node: state.byId.get(edge.target)
-    })).filter(item => item.node);
+    const outgoing = (state.outAdj.get(id) || [])
+      .filter(edgePassesFilters)
+      .map(edge => ({ edge, node: state.byId.get(edge.target) }))
+      .filter(item => item.node);
 
-    const incoming = (state.inAdj.get(id) || []).map(edge => ({
-      edge,
-      node: state.byId.get(edge.source)
-    })).filter(item => item.node);
+    const incoming = (state.inAdj.get(id) || [])
+      .filter(edgePassesFilters)
+      .map(edge => ({ edge, node: state.byId.get(edge.source) }))
+      .filter(item => item.node);
 
     $('outgoing-count').textContent = outgoing.length;
     $('backlinks-count').textContent = incoming.length;
@@ -2072,6 +2178,11 @@
 
     state.visibleTypes = new Set(Object.keys(TYPE_LABELS));
     $('type-filters').querySelectorAll('input').forEach(i => i.checked = true);
+
+    state.visibleProvenance = new Set([...$('provenance-filters').querySelectorAll('input')].map(i => i.dataset.provenance));
+    $('provenance-filters').querySelectorAll('input').forEach(i => i.checked = true);
+    state.visibleRelationFamilies = new Set([...$('relation-filters').querySelectorAll('input')].map(i => i.dataset.relationFamily));
+    $('relation-filters').querySelectorAll('input').forEach(i => i.checked = true);
 
     updatePhysics();
     applyFilters(true);
@@ -2167,12 +2278,14 @@
 
   async function boot() {
     try {
-      const entries = await Promise.all(
-        Object.entries(SOURCES).map(async pair => [pair[0], await loadJson(pair[1])])
-      );
+      const [entries, datasetMeta] = await Promise.all([
+        Promise.all(Object.entries(SOURCES).map(async pair => [pair[0], await loadJson(pair[1])])),
+        loadOptionalJson(SOURCE_META_URL, {})
+      ]);
 
       const raw = Object.fromEntries(entries);
       const manualLinks = await loadOptionalJson('./data/manual-links.json', []);
+      state.datasetMeta = datasetMeta || {};
 
       state.nodes = normalizeData(raw);
       state.edges = buildEdges(state.nodes, manualLinks, raw.cardPowers);
@@ -2182,12 +2295,25 @@
       setupControls();
       applyFilters(false);
 
-      setTimeout(fitGraph, 500);
+      const initialNode = new URL(window.location.href).searchParams.get('node');
+      if (initialNode && state.byId.has(initialNode)) {
+        focusNode(initialNode, false);
+      } else if (initialNode) {
+        setNodeInUrl(null, true);
+      }
+
+      setTimeout(() => initialNode ? fitNeighborhood(initialNode) : fitGraph(), 500);
 
       $('loading-state').classList.add('hidden');
       $('dataset-status').classList.add('ready');
-      $('dataset-status').innerHTML = '<span class="status-dot"></span><span>Vault ready</span>';
+      const version = state.datasetMeta.game_data_version ? 'v' + state.datasetMeta.game_data_version : 'snapshot';
+      $('dataset-status').innerHTML = '<span class="status-dot"></span><span>' + htmlEsc(version) + ' ready</span>';
       $('data-count').textContent = state.nodes.length + ' notes · ' + state.edges.length + ' links';
+      if ($('data-snapshot')) {
+        const shortSha = String(state.datasetMeta.source_commit || '').slice(0, 7);
+        const date = state.datasetMeta.snapshot_date || '';
+        $('data-snapshot').textContent = [version, date, shortSha].filter(Boolean).join(' · ');
+      }
     } catch (err) {
       console.error(err);
       $('loading-state').innerHTML = '<strong>Could not load STS2 data</strong><span>' + htmlEsc(err.message) + '</span>';
