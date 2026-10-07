@@ -1,0 +1,74 @@
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { build } from 'esbuild';
+import { loadSnapshot } from './load-snapshot.mjs';
+import { SOURCES, SOURCE_META_URL } from '../lib/graph-model.mjs';
+import { validateModel } from '../lib/validate-model.mjs';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+
+export async function buildPreview(output = path.join(root, 'dist/sts2-bubble-preview.html')) {
+  const snapshot = await loadSnapshot(root);
+  const { errors, nodes, edges } = validateModel(snapshot);
+  if (errors.length) throw new Error('Invalid preview snapshot:\n' + errors.join('\n'));
+
+  const [template, css, result, manifest] = await Promise.all([
+    readFile(path.join(root, 'index.html'), 'utf8'),
+    readFile(path.join(root, 'styles.css'), 'utf8'),
+    build({
+      absWorkingDir: root,
+      stdin: {
+        contents: "import * as PIXI from 'pixi.js'; import * as d3 from 'd3'; import './app.js'; globalThis.PIXI = PIXI; globalThis.d3 = d3;",
+        resolveDir: root,
+        sourcefile: 'preview-entry.mjs'
+      },
+      bundle: true, write: false, format: 'esm', platform: 'browser',
+      target: 'es2022', minify: true, legalComments: 'inline', charset: 'utf8'
+    }),
+    readFile(path.join(root, 'package.json'), 'utf8').then(JSON.parse)
+  ]);
+
+  const stylesheet = /<link\s+rel="stylesheet"\s+href="\.\/styles\.css(?:\?[^"]*)?"\s*>/;
+  if (!stylesheet.test(template)) throw new Error('Could not find the preview stylesheet');
+  const scripts = /<script\b[^>]*\bsrc="([^"]+)"[^>]*>\s*<\/script>/g;
+  const scriptSources = [...template.matchAll(scripts)].map(match => match[1]);
+  const librarySources = ['pixi.js', 'd3'].map(name =>
+    'https://cdn.jsdelivr.net/npm/' + name + '@' + manifest.devDependencies[name] + '/dist/' + (name === 'pixi.js' ? 'pixi' : name) + '.min.js');
+  if (!librarySources.every(source => scriptSources.includes(source)) ||
+      !scriptSources.some(source => /^\.\/app\.js(?:\?|$)/.test(source)) ||
+      scriptSources.some(source => !librarySources.includes(source) &&
+        source !== 'https://spire-codex.com/widget/spire-codex-tooltip.js' && !/^\.\/app\.js(?:\?|$)/.test(source))) {
+    throw new Error('Preview dependencies differ from the website; update the preview entry');
+  }
+
+  const embedded = Object.fromEntries(Object.entries(SOURCES).map(([key, file]) => [file, snapshot.raw[key]]));
+  embedded[SOURCE_META_URL] = snapshot.meta;
+  embedded['data/manual-links.json'] = snapshot.manualLinks;
+  // JSON is script text in HTML: escape markup so descriptions cannot close it.
+  const json = JSON.stringify(embedded).replace(/</g, '\\u003c');
+  const javascript = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
+  const html = template
+    .replace(stylesheet, () => '<style>' + css.replace(/<\/style/gi, '<\\/style') + '</style>')
+    .replace(scripts, '')
+    .replace('</body>', () => '<script id="sts2-snapshot" type="application/json">' + json + '</script>\n' +
+      '<script type="module">' + javascript + '</script>\n</body>');
+  const destination = path.resolve(output);
+  await mkdir(path.dirname(destination), { recursive: true });
+  await writeFile(destination, html);
+  return { output: destination, nodes: nodes.length, edges: edges.length, bytes: Buffer.byteLength(html) };
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const args = process.argv.slice(2);
+    if (args.length && (args.length !== 2 || args[0] !== '--output' || !args[1])) {
+      throw new Error('Usage: node scripts/build-preview.mjs [--output preview.html]');
+    }
+    const result = await buildPreview(args[1]);
+    console.log('Built standalone preview: ' + result.output + ' (' + result.nodes + ' notes, ' + result.edges + ' links, ' + result.bytes + ' bytes)');
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
+}

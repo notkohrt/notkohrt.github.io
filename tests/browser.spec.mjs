@@ -1,5 +1,9 @@
 import { test as base, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { buildPreview } from '../scripts/build-preview.mjs';
 
 const test = base.extend({
   page: async ({ page }, use) => {
@@ -21,6 +25,7 @@ const test = base.extend({
 
 async function ready(page, path = '/') {
   await page.goto(path);
+  await expect(page.locator('.app-shell')).toHaveCSS('display', 'grid');
   await expect(page.locator('#dataset-status')).toHaveClass(/ready/);
   await expect(page.locator('#loading-state')).toBeHidden();
   await expect(page.locator('#graph-canvas canvas')).toHaveCount(1);
@@ -40,6 +45,66 @@ test('renders the graph and restores a shared note URL', async ({ page }) => {
   await expect(page.locator('#data-count')).toHaveText(/\d+ notes · \d+ links/);
   await page.reload();
   await expect(page.locator('#entity-name')).toHaveText('Shiv');
+});
+
+test('loads styling, modules, and pinned data from a nested preview path', async ({ page }) => {
+  const prefix = '/preview/sts2/';
+  const dataRequests = [];
+  page.on('request', request => {
+    if (new URL(request.url()).pathname.includes('/data/')) dataRequests.push(request.url());
+  });
+  // Emulate a server mounting only this checkout under a path prefix. Requests
+  // outside the mount must fail so root-relative data cannot pass unnoticed.
+  await page.route('**/data/**', route => route.fulfill({ status: 404, body: 'Outside the preview mount' }));
+  await page.route('**' + prefix + '**', async route => {
+    const upstream = new URL(route.request().url());
+    upstream.pathname = upstream.pathname.slice(prefix.length - 1);
+    await route.fulfill({ response: await route.fetch({ url: upstream.href }) });
+  });
+  await ready(page, prefix + '?node=card:SHIV');
+  await expect(page.locator('#entity-name')).toHaveText('Shiv');
+  await expect(page.locator('#data-count')).toHaveText(/\d+ notes · \d+ links/);
+  expect(dataRequests).toHaveLength(10);
+  expect(dataRequests.every(url => new URL(url).pathname.startsWith(prefix + 'data/'))).toBe(true);
+  await find(page, 'Resonance', 'card:RESONANCE');
+  expect(new URL(page.url()).pathname).toBe(prefix);
+  await page.reload();
+  await expect(page.locator('#dataset-status')).toHaveClass(/ready/);
+  await expect(page.locator('#entity-name')).toHaveText('Resonance');
+});
+
+test('standalone preview supports desktop and mobile navigation without linked assets or external requests', async ({ page }) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'sts2-preview-browser-'));
+  try {
+    const result = await buildPreview(path.join(directory, 'preview.html'));
+    const blocked = [];
+    const preview = 'http://127.0.0.1:8123/__standalone__/preview.html';
+    // The managed cloud browser blocks file: URLs. Serve only the generated
+    // HTML response; every attempted sibling asset or external request fails.
+    await page.route(/^https?:/, route => {
+      const request = route.request();
+      if (request.isNavigationRequest() && request.url().split('?')[0] === preview) {
+        return route.fulfill({ path: result.output, contentType: 'text/html; charset=utf-8' });
+      }
+      blocked.push(request.url());
+      return route.abort();
+    });
+    await ready(page, preview + '?node=card:SHIV');
+    await expect(page.locator('#data-count')).toHaveText(result.nodes + ' notes · ' + result.edges + ' links');
+    await expect(page.locator('#entity-name')).toHaveText('Shiv');
+    await find(page, 'Resonance', 'card:RESONANCE');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('#inspector-toggle').click();
+    await page.locator('.relation-trace[data-edge-id="card:RESONANCE|power:STRENGTH_POWER|grants"]').click();
+    await expect(page.locator('#connection-caption')).toBeVisible();
+    await expect(page.locator('#connection-caption-text')).toHaveText('Resonance → grants → Strength');
+    await page.reload();
+    await expect(page.locator('#dataset-status')).toHaveClass(/ready/);
+    await expect(page.locator('#entity-name')).toHaveText('Resonance');
+    expect(blocked).toEqual([]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('quick switcher traps focus, exposes its active option, and Escape preserves selection', async ({ page }) => {

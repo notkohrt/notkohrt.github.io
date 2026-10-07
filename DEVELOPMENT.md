@@ -4,7 +4,7 @@ The public graph is intentionally built from a **pinned local snapshot** of Spir
 
 ## Architecture and local development
 
-The website is static HTML/CSS and a browser ES module. Pixi 7.4.2 renders the graph and d3 7.9.0 runs the force simulation; there is no production bundler or npm runtime dependency.
+The website is static HTML/CSS and a browser ES module. Pixi 7.4.2 renders the graph and d3 7.9.0 runs the force simulation; the deployed site has no build step or npm runtime dependency. esbuild is a development dependency for the standalone preview artifact.
 
 Rendering is scheduled on simulation ticks and interaction changes. Settled layouts stop rebuilding edges; opening the quick switcher or hiding the tab pauses simulation work. Camera changes and selection still request a frame.
 
@@ -27,6 +27,16 @@ python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
 `package.json` contains development dependencies only. Browser tests use the exact pinned Pixi/d3 distributions from the integrity-checked lockfile and omit the optional tooltip widget, so graph checks are independent of external CDN availability.
+
+Serve the complete checkout over HTTP so the HTML, stylesheet, ES modules, and pinned JSON files are available together. An individual `index.html` file preview cannot run this app. `lib/browser-data.mjs` resolves pinned data relative to the checkout, so hosting at a nested path works as well as hosting at the domain root. Browser checks verify styling and loading under a nested preview path.
+
+For a portable preview that can be opened as a single file:
+
+```sh
+npm run build:preview
+```
+
+Open `dist/sts2-bubble-preview.html` in a browser, or pass `-- --output /tmp/preview.html` to write elsewhere. The builder validates the snapshot, embeds the stylesheet, bundles the same app/model/geometry with the exact locked Pixi/d3 versions, and includes every pinned JSON file plus curated links. It omits the optional external tooltip widget. No server or network request is needed. This is a generated artifact; edit the shared source files and regenerate it. CI checks deterministic snapshot parity, exercises a single HTML response with all asset/external requests blocked, and uploads the HTML for review.
 
 ```sh
 npx playwright install chromium

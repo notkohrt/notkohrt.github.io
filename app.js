@@ -1,5 +1,6 @@
 import { SOURCES, SOURCE_META_URL, RELATION_FAMILIES, normalizeData, buildEdges, relationFamily, createNodePaths } from './lib/graph-model.mjs';
 import { assignEdgeLanes, edgeGeometry, uniqueLayoutLinks } from './lib/graph-geometry.mjs';
+import { loadJson } from './lib/browser-data.mjs';
 
 (() => {
   const RELATION_FAMILY_LABELS = Object.fromEntries(Object.entries(RELATION_FAMILIES).map(([id, family]) => [id, family.label]));
@@ -110,12 +111,6 @@ import { assignEdgeLanes, edgeGeometry, uniqueLayoutLinks } from './lib/graph-ge
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-
-  async function loadJson(url) {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to load ' + url);
-    return res.json();
-  }
 
   function buildAdjacency() {
     state.byId = new Map(state.nodes.map(n => [n.id, n]));
@@ -1578,12 +1573,12 @@ import { assignEdgeLanes, edgeGeometry, uniqueLayoutLinks } from './lib/graph-ge
   async function boot() {
     try {
       const [entries, datasetMeta] = await Promise.all([
-        Promise.all(Object.entries(SOURCES).map(async pair => [pair[0], await loadJson('/' + pair[1])])),
-        loadJson('/' + SOURCE_META_URL)
+        Promise.all(Object.entries(SOURCES).map(async pair => [pair[0], await loadJson(pair[1])])),
+        loadJson(SOURCE_META_URL)
       ]);
 
       const raw = Object.fromEntries(entries);
-      const manualLinks = await loadJson('./data/manual-links.json');
+      const manualLinks = await loadJson('data/manual-links.json');
       state.datasetMeta = datasetMeta || {};
 
       state.nodes = normalizeData(raw);

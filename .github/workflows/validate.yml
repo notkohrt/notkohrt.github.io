@@ -26,6 +26,14 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Check syntax, emitted graph semantics, and website/vault parity
         run: npm run check
+      - name: Build standalone preview
+        run: npm run build:preview
+      - name: Upload standalone preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: sts2-bubble-preview
+          path: dist/sts2-bubble-preview.html
+          if-no-files-found: error
       - name: Build Obsidian vault
         run: node scripts/build-vault.mjs
       - name: Verify generated vault
@@ -51,7 +59,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Install Chromium and system dependencies
         run: npx playwright install --with-deps chromium
-      - name: Check directed connections, keyboard navigation, filters, and mobile behavior
+      - name: Check styled previews, directed connections, keyboard navigation, filters, and mobile behavior
         run: npm run test:browser
       - name: Upload browser failure traces
         if: failure()
