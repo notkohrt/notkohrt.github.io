@@ -956,10 +956,23 @@ async function main() {
   const nodePaths = new Map();
   const pathToId = new Map();
 
+  // Names are user-facing, but they are not guaranteed unique. Use the source
+  // ID only when a folder/name collision exists so normal notes stay clean.
+  const basePathCounts = new Map();
   for (const node of nodes) {
-    const relative = path.posix.join(FOLDERS[node.type], safeFileName(node.name) + '.md');
+    const base = path.posix.join(FOLDERS[node.type], safeFileName(node.name));
+    basePathCounts.set(base, (basePathCounts.get(base) || 0) + 1);
+  }
+
+  for (const node of nodes) {
+    const base = path.posix.join(FOLDERS[node.type], safeFileName(node.name));
+    const fileStem = (basePathCounts.get(base) || 0) > 1
+      ? base + ' [' + safeFileName(node.sourceId) + ']'
+      : base;
+    const relative = fileStem + '.md';
+
     nodePaths.set(node.id, relative);
-    pathToId.set(relative.replace(/\.md$/i, ''), node.id);
+    pathToId.set(fileStem, node.id);
   }
 
   const curatedById = new Map();
@@ -1016,6 +1029,9 @@ async function main() {
   );
 
   console.log('Vault rebuilt:', counts);
+  console.log('Vault notes:', nodePaths.size);
+  console.log('Collision-safe note paths:', [...basePathCounts.values()].filter(count => count > 1).length);
+  console.log('Detected relationships:', detected.length);
   console.log('Curated links exported:', manualLinks.length);
 }
 
