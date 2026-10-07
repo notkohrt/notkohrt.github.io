@@ -61,7 +61,15 @@
   const CARD_TYPE_MECHANICS = [
     { id:'CARD_TYPE_ATTACK', name:'Attack Cards', description:'Cards with the Attack type.' },
     { id:'CARD_TYPE_SKILL', name:'Skill Cards', description:'Cards with the Skill type.' },
-    { id:'CARD_TYPE_POWER', name:'Power Cards', description:'Cards with the Power type.' }
+    { id:'CARD_TYPE_POWER', name:'Power Cards', description:'Cards with the Power type.' },
+    { id:'CARD_TYPE_STATUS', name:'Status Cards', description:'Cards with the Status type.' },
+    { id:'CARD_TYPE_COLORLESS', name:'Colorless Cards', description:'Cards from the Colorless pool.' }
+  ];
+
+  const SYSTEM_MECHANICS = [
+    { id:'ORB_SYSTEM', name:'Orbs', description:'The Defect orb system and channeled Orb state.', group:'orbs' },
+    { id:'ORB_SLOTS', name:'Orb Slots', description:'Capacity for Channeled Orbs.', group:'orbs' },
+    { id:'OSTY', name:'Osty', description:'The Necrobinder companion controlled through Summon and Osty-specific cards.', group:'character_mechanics' }
   ];
 
   const EFFECT_DEFS = [
@@ -252,6 +260,18 @@
       }
     }
 
+    for (const item of SYSTEM_MECHANICS) {
+      nodes.push({
+        id: nodeId('mechanic', item.id),
+        sourceId: item.id,
+        type: 'mechanic',
+        name: item.name,
+        description: item.description,
+        mechanicGroup: item.group,
+        systemDerived: true
+      });
+    }
+
     for (const item of CARD_TYPE_MECHANICS) {
       nodes.push({
         id: nodeId('mechanic', item.id),
@@ -436,6 +456,8 @@
     }
 
     if (effectId === 'CREATE_CARD') {
+      if (/\b(?:whenever|when|each time|first time)\b[^.\n]{0,52}\bcreate(?:s|d|ing)?\s+(?:a\s+)?card\b/.test(t)) return 'triggers on card creation';
+      if (/\bfor each\b[^.\n]{0,48}\bcard\s+(?:you\s+)?created\b/.test(t)) return 'scales with card creation';
       if (/\bcopy\s+of\s+this\s+card\b/.test(t)) return 'creates copy of self';
       if (/\bcopy\b[^.\n]{0,36}\binto\s+your\s+hand\b/.test(t)) return 'creates copy';
       return fallback;
@@ -483,8 +505,24 @@
       }
     }
 
-    // Discard Pile mentions are ignored here unless a specific move/play
-    // relationship is supplied by a high-confidence parser or curated override.
+    if (/\bfrom\s+(?:your\s+)?discard\s+pile\b[^.\n]{0,52}\b(?:hand|draw\s+pile)\b/i.test(text) ||
+        /\bput\b[^.\n]{0,46}\bdiscard\s+pile\b[^.\n]{0,46}\b(?:hand|draw\s+pile)\b/i.test(text)) {
+      pushEdge(source.id, nodeId('mechanic','DISCARD_PILE'), 'moves from', 'derived');
+    }
+    if (/\bdiscard\s+pile\b[^.\n]{0,60}\bdraw\s+pile\b/i.test(text)) {
+      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'moves to', 'derived');
+    }
+    if (/\bfrom\s+(?:your\s+)?draw\s+pile\b[^.\n]{0,52}\bhand\b/i.test(text) ||
+        /\bput\b[^.\n]{0,46}\bdraw\s+pile\b[^.\n]{0,46}\bhand\b/i.test(text)) {
+      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'moves from', 'derived');
+    }
+    if (/\bfrom\s+(?:your\s+)?hand\b[^.\n]{0,52}\b(?:top of )?(?:your\s+)?draw\s+pile\b/i.test(text) ||
+        /\bput\b[^.\n]{0,38}\bhand\b[^.\n]{0,46}\bdraw\s+pile\b/i.test(text)) {
+      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'moves to', 'derived');
+    }
+    if (/\bplay\b[^.\n]{0,46}\bfrom\s+(?:your\s+)?draw\s+pile\b|\bplay\s+the\s+top\b[^.\n]{0,34}\bdraw\s+pile\b/i.test(text)) {
+      pushEdge(source.id, nodeId('mechanic','DRAW_PILE'), 'plays from', 'derived');
+    }
 
     if (/\bexhaust\s+pile\b/i.test(text)) {
       let relation = null;
@@ -566,6 +604,71 @@
     ['relic:BRIMSTONE', 'power:STRENGTH_POWER', ['grants to self & enemies']]
   ];
 
+  const DEFECT_SEMANTIC_OVERRIDES = [
+    ['card:BIASED_COGNITION', 'power:FOCUS_POWER', ['grants', 'reduces over time']],
+    ['relic:DATA_DISK', 'power:FOCUS_POWER', ['grants']],
+    ['card:BULK_UP', 'mechanic:ORB_SLOTS', ['reduces']],
+    ['card:CAPACITOR', 'mechanic:ORB_SLOTS', ['grants']],
+    ['card:MODDED', 'mechanic:ORB_SLOTS', ['grants']],
+    ['relic:RUNIC_CAPACITOR', 'mechanic:ORB_SLOTS', ['grants']],
+    ['card:BARRAGE', 'mechanic:ORB_SYSTEM', ['scales with Channeled Orbs']],
+    ['card:COMPILE_DRIVER', 'mechanic:ORB_SYSTEM', ['scales with unique Orbs']],
+    ['card:COOLANT', 'mechanic:ORB_SYSTEM', ['scales with unique Orbs']],
+    ['card:SYNCHRONIZE', 'mechanic:ORB_SYSTEM', ['scales with unique Orbs']],
+    ['card:LOOP', 'mechanic:ORB_SYSTEM', ['triggers passive']],
+    ['relic:EMOTION_CHIP', 'effect:LOSE_HP', ['requires HP loss']],
+    ['relic:EMOTION_CHIP', 'mechanic:ORB_SYSTEM', ['triggers passive']],
+    ['relic:GOLD_PLATED_CABLES', 'mechanic:ORB_SYSTEM', ['triggers passive']],
+    ['relic:METRONOME', 'mechanic:ORB_SYSTEM', ['triggers after 7 Channels']],
+    ['card:DARKNESS', 'mechanic:DARK', ['channels', 'triggers passive']],
+    ['card:THUNDER', 'mechanic:LIGHTNING', ['triggers on Evoke']],
+    ['card:VOLTAIC', 'mechanic:LIGHTNING', ['scales with previously Channeled']]
+  ];
+
+  const NECROBINDER_SEMANTIC_OVERRIDES = [
+    ['card:DEATHS_DOOR', 'power:DOOM_POWER', ['requires Doom application']],
+    ['card:END_OF_DAYS', 'power:DOOM_POWER', ['applies', 'kills at Doom ≥ HP']],
+    ['card:NO_ESCAPE', 'power:DOOM_POWER', ['applies', 'scales with existing Doom']],
+    ['card:TIMES_UP', 'power:DOOM_POWER', ['scales with Doom']],
+    ['card:SHROUD', 'power:DOOM_POWER', ['triggers on Doom application']],
+    ['card:REAPER_FORM', 'power:DOOM_POWER', ['applies from Attack damage']],
+    ['relic:BOOK_REPAIR_KNIFE', 'power:DOOM_POWER', ['triggers on Doom kill']],
+    ['relic:UNDYING_SIGIL', 'power:DOOM_POWER', ['modifies damage at Doom ≥ HP']],
+    ['card:DEVOUR_LIFE', 'card:SOUL', ['triggers on Soul play']],
+    ['card:HAUNT', 'card:SOUL', ['triggers on Soul play']],
+    ['card:SOUL_STORM', 'card:SOUL', ['scales with Souls in Exhaust Pile']],
+    ['card:SEANCE', 'card:SOUL', ['transforms into']],
+    ['relic:BONE_FLUTE', 'mechanic:OSTY', ['triggers on attack']],
+    ['card:NECRO_MASTERY', 'mechanic:OSTY', ['triggers on HP loss']],
+    ['card:BONE_SHARDS', 'mechanic:OSTY', ['requires alive', 'sacrifices']],
+    ['card:SACRIFICE', 'mechanic:OSTY', ['requires alive', 'sacrifices']],
+    ['card:FLATTEN', 'mechanic:OSTY', ['requires prior attack']],
+    ['card:SQUEEZE', 'mechanic:OSTY', ['scales with Osty Attacks']],
+    ['card:PROTECTOR', 'mechanic:OSTY', ['scales with Max HP']],
+    ['card:UNLEASH', 'mechanic:OSTY', ['scales with HP']],
+    ['card:SIC_EM', 'mechanic:OSTY', ['triggers on hit']]
+  ];
+
+  const REGENT_SEMANTIC_OVERRIDES = [
+    ['card:CRESCENT_SPEAR', 'mechanic:STAR_COUNT', ['scales with Star-cost cards']],
+    ['card:RADIATE', 'mechanic:STAR_COUNT', ['scales with Stars gained']],
+    ['card:CHILD_OF_THE_STARS', 'mechanic:STAR_COUNT', ['triggers on Stars spent', 'scales with Stars spent']],
+    ['relic:GALACTIC_DUST', 'mechanic:STAR_COUNT', ['scales with Stars spent']],
+    ['relic:MINI_REGENT', 'mechanic:STAR_COUNT', ['triggers on Stars spent']],
+    ['card:CONQUEROR', 'card:SOVEREIGN_BLADE', ['modifies damage']],
+    ['card:PARRY', 'card:SOVEREIGN_BLADE', ['grants Block']],
+    ['card:SEEKING_EDGE', 'card:SOVEREIGN_BLADE', ['modifies target scope']],
+    ['card:SWORD_SAGE', 'card:SOVEREIGN_BLADE', ['grants Replay']],
+    ['card:SUMMON_FORTH', 'card:SOVEREIGN_BLADE', ['moves to Hand']],
+    ['card:I_AM_INVINCIBLE', 'mechanic:DRAW_PILE', ['plays from top']],
+    ['card:FOREGONE_CONCLUSION', 'mechanic:DRAW_PILE', ['moves from']],
+    ['card:GLIMMER', 'mechanic:DRAW_PILE', ['moves to']],
+    ['card:PHOTON_CUT', 'mechanic:DRAW_PILE', ['moves to']],
+    ['card:SHINING_STRIKE', 'mechanic:DRAW_PILE', ['moves to']],
+    ['card:HEIRLOOM_HAMMER', 'mechanic:CARD_TYPE_COLORLESS', ['copies Colorless card']],
+    ['relic:VITRUVIAN_MINION', 'tag:MINION', ['modifies Minion cards']]
+  ];
+
   function addCardTypeRelations(source, text, pushEdge) {
     const t = norm(text);
     const attack = nodeId('mechanic','CARD_TYPE_ATTACK');
@@ -637,6 +740,18 @@
     if (/\bnext\s+power\b[^.\n]{0,42}\bplayed\s+an\s+(?:extra|additional)\s+time\b/.test(t)) {
       pushEdge(source.id, power, 'repeats next Power', 'derived');
     }
+
+    const status = nodeId('mechanic','CARD_TYPE_STATUS');
+    const colorless = nodeId('mechanic','CARD_TYPE_COLORLESS');
+
+    if (/\b(?:whenever|when|each time)\b[^.\n]{0,48}\bcreate(?:s|d|ing)?\s+(?:a\s+)?status\b/.test(t)) pushEdge(source.id, status, 'triggers on Status creation', 'derived');
+    else if (/\b(?:create|creates|created)\s+(?:a\s+)?status\b/.test(t)) pushEdge(source.id, status, 'creates Status', 'derived');
+    if (/\bexhaust\s+(?:all\s+)?(?:your\s+)?status\s+cards?\b/.test(t)) pushEdge(source.id, status, 'exhausts Status cards', 'derived');
+    if (/\bdraw\s+(?:a\s+)?status\b/.test(t)) pushEdge(source.id, status, 'triggers on Status draw', 'derived');
+    if (/\btransform\s+(?:all\s+)?status\s+cards?\b/.test(t)) pushEdge(source.id, status, 'transforms Status cards', 'derived');
+
+    if (/\badd\b[^.\n]{0,34}\bcolorless\s+card/.test(t)) pushEdge(source.id, colorless, 'creates Colorless card', 'derived');
+    if (/\bcopy\b[^.\n]{0,34}\bcolorless\s+card/.test(t)) pushEdge(source.id, colorless, 'copies Colorless card', 'derived');
   }
 
   function addTagSemanticRelations(source, text, pushEdge) {
@@ -650,6 +765,82 @@
       } else if (/\bdraw\b[^.\n]{0,42}\bstrike\b/.test(t)) {
         pushEdge(source.id, strike, 'triggers on drawing Strike', 'derived');
       }
+    }
+
+    if (/\bcards?\s+containing\s+[“"]?minion[”"]?\b/.test(t)) {
+      pushEdge(source.id, nodeId('tag','MINION'), 'modifies Minion cards', 'derived');
+    }
+  }
+
+  function addCharacterMechanicRelations(source, text, pushEdge) {
+    const t = norm(text);
+    const orbSystem = nodeId('mechanic','ORB_SYSTEM');
+    const orbSlots = nodeId('mechanic','ORB_SLOTS');
+    const osty = nodeId('mechanic','OSTY');
+    const summon = nodeId('mechanic','SUMMON');
+    const forge = nodeId('mechanic','FORGE');
+    const replay = nodeId('mechanic','REPLAY');
+    const fatal = nodeId('mechanic','FATAL');
+    const stars = nodeId('mechanic','STAR_COUNT');
+
+    const orbNames = [
+      ['LIGHTNING','lightning'],
+      ['FROST','frost'],
+      ['DARK','dark'],
+      ['PLASMA','plasma'],
+      ['GLASS','glass']
+    ];
+
+    for (const [id, name] of orbNames) {
+      if (new RegExp('\\bchannel(?:s|ed|ing)?\\b[^.\\n]{0,30}\\b' + name + '\\b').test(t)) {
+        pushEdge(source.id, nodeId('mechanic',id), 'channels', 'derived');
+      }
+      if (new RegExp('\\bevoke(?:s|d|ing)?\\b[^.\\n]{0,30}\\b' + name + '\\b').test(t)) {
+        pushEdge(source.id, nodeId('mechanic',id), 'evokes', 'derived');
+      }
+      if (new RegExp('\\btrigger\\b[^.\\n]{0,40}\\bpassive\\b[^.\\n]{0,34}\\b' + name + '\\b').test(t)) {
+        pushEdge(source.id, nodeId('mechanic',id), 'triggers passive', 'derived');
+      }
+    }
+
+    if (/\bchannel(?:s|ed|ing)?\b[^.\n]{0,34}\borbs?\b|\bchanneled\s+orb\b/.test(t)) {
+      const relation = /\bfor each\b[^.\n]{0,42}\b(?:channeled\s+)?orb\b/.test(t) ? 'scales with Channeled Orbs' : 'channels';
+      pushEdge(source.id, orbSystem, relation, 'derived');
+    }
+    if (/\bevoke(?:s|d|ing)?\b[^.\n]{0,34}\borbs?\b/.test(t)) pushEdge(source.id, orbSystem, 'evokes', 'derived');
+    if (/\btrigger\b[^.\n]{0,42}\bpassive\b[^.\n]{0,38}\borbs?\b/.test(t)) pushEdge(source.id, orbSystem, 'triggers passive', 'derived');
+    if (/\bfor each unique orb\b/.test(t)) pushEdge(source.id, orbSystem, 'scales with unique Orbs', 'derived');
+
+    if (/\bgain\s+\d+\s+(?:additional\s+)?orb slots?\b/.test(t)) pushEdge(source.id, orbSlots, 'grants', 'derived');
+    if (/\blose\s+\d+\s+orb slots?\b/.test(t)) pushEdge(source.id, orbSlots, 'reduces', 'derived');
+    if (/\badditional\s+orb slots?\b/.test(t) && !/\bgain\b/.test(t)) pushEdge(source.id, orbSlots, 'grants', 'derived');
+
+    if (/\bsummon\b/.test(t)) pushEdge(source.id, summon, 'summons / strengthens Osty', 'derived');
+    if (/\bosty\b/.test(t)) {
+      let relation = 'interacts with';
+      if (/\bosty\b[^.\n]{0,30}\b(?:deal|deals|attack|attacks)\b/.test(t)) relation = 'commands attack';
+      if (/\bosty\b[^.\n]{0,30}\bheal(?:s|ed|ing)?\b/.test(t)) relation = 'heals';
+      if (/\bosty\b[^.\n]{0,30}\bdies?\b/.test(t)) relation = 'sacrifices';
+      if (/\bif\s+osty\s+is\s+alive\b/.test(t)) relation = 'requires alive';
+      if (/\bosty(?:'s)?\s+current\s+hp\b/.test(t)) relation = 'scales with HP';
+      if (/\bosty(?:'s)?\s+attacks?\b[^.\n]{0,34}\badditional\s+damage\b/.test(t)) relation = 'modifies damage';
+      pushEdge(source.id, osty, relation, 'derived');
+    }
+
+    if (/\bforge\b/.test(t)) {
+      const relation = /\bwhenever\b[^.\n]{0,30}\bforge\b/.test(t) ? 'triggers on Forge' : 'forges';
+      pushEdge(source.id, forge, relation, 'derived');
+    }
+    if (/\breplay\b/.test(t)) pushEdge(source.id, replay, 'grants Replay', 'derived');
+    if (/\bfatal\b|\bif this kills?\b/.test(t)) pushEdge(source.id, fatal, 'triggers on kill', 'derived');
+
+    if (/\[s\]/.test(t)) {
+      let relation = 'uses Stars';
+      if (/\bwhenever\s+you\s+(?:spend|gain)\b[^.\n]{0,22}\[s\]/.test(t) || /\bfirst time\s+you\s+spend\b[^.\n]{0,22}\[s\]/.test(t)) relation = 'triggers on Stars';
+      else if (/\bfor (?:each|every)\b[^.\n]{0,42}\[s\]/.test(t) || /\[s\]\s+cost/.test(t) || /\beach\s+\[s\]\s+spent\b/.test(t)) relation = 'scales with Stars';
+      else if (/\bspend\b[^.\n]{0,24}\[s\]/.test(t)) relation = 'spends Stars';
+      else if (/\bgain\b[^.\n]{0,30}\[s\]/.test(t)) relation = 'gains Stars';
+      pushEdge(source.id, stars, relation, 'derived');
     }
   }
 
@@ -667,7 +858,25 @@
       'mechanic:HIT_POINTS',
       'mechanic:DRAW_PILE',
       'mechanic:DISCARD_PILE',
-      'mechanic:EXHAUST_PILE'
+      'mechanic:EXHAUST_PILE',
+      'mechanic:ORB_SYSTEM',
+      'mechanic:ORB_SLOTS',
+      'mechanic:OSTY',
+      'mechanic:SUMMON',
+      'mechanic:FORGE',
+      'mechanic:REPLAY',
+      'mechanic:FATAL',
+      'mechanic:STAR_COUNT',
+      'mechanic:CARD_TYPE_ATTACK',
+      'mechanic:CARD_TYPE_SKILL',
+      'mechanic:CARD_TYPE_POWER',
+      'mechanic:CARD_TYPE_STATUS',
+      'mechanic:CARD_TYPE_COLORLESS',
+      'mechanic:LIGHTNING',
+      'mechanic:FROST',
+      'mechanic:DARK',
+      'mechanic:PLASMA',
+      'mechanic:GLASS'
     ]);
 
     for (const candidate of nodes.filter(n =>
@@ -802,7 +1011,13 @@
       ['keyword:SLY', 'effect:DISCARD', 'triggers when discarded'],
       ['effect:HEAL', 'mechanic:HIT_POINTS', 'restores'],
       ['effect:LOSE_HP', 'mechanic:HIT_POINTS', 'reduces'],
-      ['effect:COST_CHANGE', 'mechanic:ENERGY', 'modifies cost']
+      ['effect:COST_CHANGE', 'mechanic:ENERGY', 'modifies cost'],
+      ['power:FOCUS_POWER', 'mechanic:ORB_SYSTEM', 'modifies effectiveness'],
+      ['mechanic:ORB_SLOTS', 'mechanic:ORB_SYSTEM', 'sets capacity'],
+      ['mechanic:SUMMON', 'mechanic:OSTY', 'summons / strengthens'],
+      ['mechanic:FORGE', 'card:SOVEREIGN_BLADE', 'modifies damage'],
+      ['mechanic:FORGE', 'card:SOVEREIGN_BLADE', 'creates on first Forge'],
+      ['mechanic:REPLAY', 'effect:PLAY_CARD', 'repeats card play']
     ];
 
     for (const [source, target, relation] of ontologyEdges) {
@@ -818,7 +1033,13 @@
       }
     }
 
-    for (const [source, target, relations] of [...SILENT_SEMANTIC_OVERRIDES, ...IRONCLAD_SEMANTIC_OVERRIDES]) {
+    for (const [source, target, relations] of [
+      ...SILENT_SEMANTIC_OVERRIDES,
+      ...IRONCLAD_SEMANTIC_OVERRIDES,
+      ...DEFECT_SEMANTIC_OVERRIDES,
+      ...NECROBINDER_SEMANTIC_OVERRIDES,
+      ...REGENT_SEMANTIC_OVERRIDES
+    ]) {
       if (!byId.has(source) || !byId.has(target)) continue;
 
       for (let i = edges.length - 1; i >= 0; i -= 1) {
