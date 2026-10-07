@@ -1,0 +1,28 @@
+name: Validate graph
+
+on:
+  push:
+    branches:
+      - main
+      - feat/sts2-graph-clean
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Syntax check browser graph
+        run: node --check app.js
+      - name: Syntax check vault generator
+        run: node --check scripts/build-vault.mjs
+      - name: Validate graph data and semantic endpoints
+        run: node scripts/validate-graph.mjs
