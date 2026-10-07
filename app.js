@@ -1676,8 +1676,8 @@
   }
 
   function edgePassesFilters(edge) {
-    if (state.visibleProvenance.size && !state.visibleProvenance.has(edge.provenance || 'description')) return false;
-    if (state.visibleRelationFamilies.size && !state.visibleRelationFamilies.has(relationFamily(edge.relation))) return false;
+    if (!state.visibleProvenance.has(edge.provenance || 'description')) return false;
+    if (!state.visibleRelationFamilies.has(relationFamily(edge.relation))) return false;
     return true;
   }
 
@@ -1963,6 +1963,7 @@
 
     if (state.focusedId && !visible.has(state.focusedId)) {
       state.focusedId = null;
+      setNodeInUrl(null, true);
       $('clear-focus').disabled = true;
       $('entity-card').classList.add('hidden');
       $('inspector-empty').classList.remove('hidden');
