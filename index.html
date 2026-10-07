@@ -22,7 +22,7 @@
   <meta name="twitter:description" content="An interactive Slay the Spire 2 knowledge graph.">
   <meta name="twitter:image" content="https://notkohrt.pro/docs/assets/sts2-neow.webp">
 
-  <link rel="stylesheet" href="./styles.css?v=20261006-10">
+  <link rel="stylesheet" href="./styles.css?v=20261006-11">
 </head>
 <body>
   <div class="app-shell">
@@ -140,6 +140,16 @@
       </section>
 
       <section class="filter-section">
+        <div class="filter-heading">Relationship source</div>
+        <div class="filter-scroll" id="provenance-filters"></div>
+      </section>
+
+      <section class="filter-section">
+        <div class="filter-heading">Relationship family</div>
+        <div class="filter-scroll" id="relation-filters"></div>
+      </section>
+
+      <section class="filter-section">
         <label class="toggle-row"><input id="isolated-filter" type="checkbox" checked><span>Hide isolated nodes</span></label>
       </section>
 
@@ -153,9 +163,9 @@
         <div id="legend-items"></div>
       </div>
 
-      <div class="source-note">
-        <span>Data</span>
-        <a href="https://github.com/nkhoit/spire-archive" target="_blank" rel="noreferrer">Spire Archive ↗</a>
+      <div class="source-note source-note-stack">
+        <div class="source-meta-row"><span>Data snapshot</span><span id="data-snapshot">loading…</span></div>
+        <a href="https://github.com/nkhoit/spire-archive" target="_blank" rel="noreferrer">Spire Archive source ↗</a>
       </div>
     </aside>
 
@@ -240,6 +250,6 @@
   <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" defer></script>
   <script src="https://spire-codex.com/widget/spire-codex-tooltip.js" defer></script>
-  <script src="./app.js?v=20261006-10" defer></script>
+  <script src="./app.js?v=20261006-11" defer></script>
 </body>
 </html>
