@@ -24,5 +24,9 @@ jobs:
         run: node --check app.js
       - name: Syntax check vault generator
         run: node --check scripts/build-vault.mjs
+      - name: Syntax check data updater
+        run: node --check scripts/update-data.mjs
+      - name: Syntax check validator
+        run: node --check scripts/validate-graph.mjs
       - name: Validate graph data and semantic endpoints
         run: node scripts/validate-graph.mjs
