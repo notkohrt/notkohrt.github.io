@@ -51,3 +51,22 @@ test('invalid curated links fail before rewriting authored notes or exports', as
   assert.equal(await readFile(file, 'utf8'), text);
   assert.equal(await readFile(path.join(output, 'data/manual-links.json'), 'utf8'), '[]\n');
 });
+
+test('vague curated verbs are rejected before generation by the shared website policy', async t => {
+  const output = await mkdtemp(path.join(tmpdir(), 'sts2-vault-policy-'));
+  t.after(() => rm(output, { recursive: true, force: true }));
+  await mkdir(path.join(output, 'vault/Cards'), { recursive: true });
+  await mkdir(path.join(output, 'data'), { recursive: true });
+  const file = path.join(output, 'vault/Cards/Shiv.md');
+  const manual = path.join(output, 'data/manual-links.json');
+  await writeFile(manual, '[]\n');
+  for (const relation of ['references', 'interacts with', 'uses Stars']) {
+    const text = '<!-- CURATED START -->\n- ' + relation + ' [[Powers/Strength]]\n<!-- CURATED END -->';
+    await writeFile(file, text);
+    const result = spawnSync(process.execPath, [generator, '--output', output], { encoding: 'utf8' });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /specific mechanical relation/);
+    assert.equal(await readFile(file, 'utf8'), text);
+    assert.equal(await readFile(manual, 'utf8'), '[]\n');
+  }
+});

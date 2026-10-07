@@ -85,6 +85,16 @@ test('inspector links are usable with a keyboard and show actual vault paths', a
   await expect(page.locator('#note-path')).toHaveText('Cards/Defend [DEFEND_IRONCLAD].md');
 });
 
+test('character mechanics appear as actionable connections in the inspector', async ({ page }) => {
+  await ready(page, '/?node=card:STORM');
+  const lightning = page.locator('#outgoing-list button[data-target="mechanic:LIGHTNING"]');
+  await expect(lightning).toContainText('channels');
+  await page.locator('.relation-trace[data-edge-id="card:STORM|mechanic:LIGHTNING|channels"]').click();
+  await expect(page.locator('#relationship-summary')).toHaveText('Storm → channels → Lightning');
+  await expect(page.locator('#relationship-evidence')).toHaveText('Whenever you play a Power, Channel 1 Lightning.');
+  await expect(page.locator('#entity-name')).toHaveText('Storm');
+});
+
 test('all backlinks remain reachable beyond the initial page', async ({ page }) => {
   await ready(page, '/?node=mechanic:BLOCK');
   const total = Number(await page.locator('#backlinks-count').innerText());
@@ -94,6 +104,77 @@ test('all backlinks remain reachable beyond the initial page', async ({ page }) 
     await page.locator('#backlinks-list .relations-more').click();
   }
   await expect(page.locator('#backlinks-list .relation')).toHaveCount(total);
+  await expect(page.locator('#backlinks-list .relation-row:last-child .relation')).toBeFocused();
+});
+
+test('parallel relationship traces keep the selected note and distinguish each role', async ({ page }) => {
+  await ready(page, '/?node=card:RESONANCE');
+  const grantsId = 'card:RESONANCE|power:STRENGTH_POWER|grants';
+  const reducesId = 'card:RESONANCE|power:STRENGTH_POWER|reduces';
+  const grants = page.locator('.relation-trace[data-edge-id="' + grantsId + '"]');
+  const reduces = page.locator('.relation-trace[data-edge-id="' + reducesId + '"]');
+  await grants.click();
+  await expect(grants).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#relationship-summary')).toHaveText('Resonance → grants → Strength');
+  await expect(page.locator('#connection-caption')).toHaveAttribute('data-edge-id', grantsId);
+  await reduces.click();
+  await expect(reduces).toHaveAttribute('aria-pressed', 'true');
+  await expect(grants).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#relationship-summary')).toHaveText('Resonance → reduces → Strength');
+  await expect(page.locator('#entity-name')).toHaveText('Resonance');
+  expect(new URL(page.url()).searchParams.get('node')).toBe('card:RESONANCE');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#connection-caption')).toBeHidden();
+  await expect(reduces).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#entity-name')).toHaveText('Resonance');
+});
+
+test('backlink traces reveal their source and text even with local direction and entity filters', async ({ page }) => {
+  await ready(page, '/?node=mechanic:BLOCK');
+  await page.getByRole('button', { name: 'Local', exact: true }).click();
+  await page.locator('#incoming-filter').uncheck();
+  await page.locator('input[data-type="card"]').uncheck();
+  const trace = page.locator('.relation-trace[data-edge-id="card:AFTERIMAGE|mechanic:BLOCK|grants"]');
+  await trace.click();
+  await expect(page.locator('input[data-type="card"]')).toBeChecked();
+  await expect(page.locator('#incoming-filter')).not.toBeChecked();
+  await expect(page.locator('#relationship-summary')).toHaveText('Afterimage → grants → Block');
+  await expect(page.locator('#relationship-evidence')).toHaveText('Whenever you play a card, gain 1 Block.');
+  await expect(page.locator('#graph-summary')).toHaveText(/2 nodes · 1 links/);
+  await expect(page.locator('#entity-name')).toHaveText('Block');
+  await page.getByRole('button', { name: 'Clear connection', exact: true }).click();
+  await expect(trace).toBeFocused();
+  await expect(page.locator('#relationship-detail')).toBeHidden();
+  await expect(page.locator('#graph-summary')).toHaveText(/1 nodes · 0 links/);
+});
+
+test('filtering out a traced relationship clears its highlight and keeps the note', async ({ page }) => {
+  await ready(page, '/?node=card:RESONANCE');
+  await page.locator('.relation-trace[data-edge-id="card:RESONANCE|power:STRENGTH_POWER|grants"]').click();
+  await page.locator('[data-relation-family="application"]').uncheck();
+  await expect(page.locator('#relationship-detail')).toBeHidden();
+  await expect(page.locator('#connection-caption')).toBeHidden();
+  await expect(page.locator('.relation-trace[aria-pressed="true"]')).toHaveCount(0);
+  await expect(page.locator('#entity-name')).toHaveText('Resonance');
+});
+
+test('mobile connection tracing reveals the canvas and retains the reading view', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await ready(page);
+  await find(page, 'Resonance', 'card:RESONANCE');
+  await page.locator('.relation-trace[data-edge-id="card:RESONANCE|power:STRENGTH_POWER|grants"]').click();
+  await expect(page.locator('#inspector-panel')).toHaveJSProperty('inert', true);
+  await expect(page.locator('#inspector-toggle')).toBeFocused();
+  await expect(page.locator('#connection-caption-text')).toHaveText('Resonance → grants → Strength');
+  await expect(page.locator('#connection-caption')).toBeVisible();
+  await expect.poll(() => page.locator('#inspector-panel').evaluate(panel => panel.getBoundingClientRect().left)).toBeGreaterThanOrEqual(390);
+  expect(new URL(page.url()).searchParams.get('node')).toBe('card:RESONANCE');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.getByRole('button', { name: 'Clear highlighted connection' }).click();
+  await expect(page.locator('#inspector-toggle')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#entity-name')).toHaveText('Resonance');
+  await expect(page.locator('#relationship-detail')).toBeHidden();
 });
 
 test('relationship filters and Reset keep inspector counts in sync', async ({ page }) => {
@@ -164,6 +245,8 @@ test('settled graphs stop rebuilding edges and zoom still redraws the canvas', a
     } finally { PIXI.Graphics.prototype.clear = original; }
   });
   expect(idleClears).toBe(0);
+  await page.locator('.relation-trace').first().click();
+  await expect(page.locator('#physics-badge')).toHaveText('layout settled', { timeout: 500 });
   const canvas = page.locator('#graph-canvas canvas');
   const before = await canvas.screenshot();
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();

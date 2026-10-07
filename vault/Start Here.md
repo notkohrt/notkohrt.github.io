@@ -26,4 +26,4 @@ Prefer specific mechanical verbs:
 - `transforms`
 - `moves`
 
-Every curated link should explain a concrete mechanic. Bare `references`, `related`, and subjective `synergizes` links are rejected. Unknown targets stop generation before authored notes or exports are rewritten.
+Every curated link should explain a concrete mechanic. Bare `references`, `related`, `interacts with`, `uses Stars`/`uses keyword`, and subjective `synergizes` links are rejected. Unknown targets and invalid verbs stop generation before authored notes or exports are rewritten.

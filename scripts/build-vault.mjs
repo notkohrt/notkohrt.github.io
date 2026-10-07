@@ -1,4 +1,4 @@
-import { SOURCES, TYPE_FOLDERS as FOLDERS, normalizeData, buildEdges, createNodePaths } from '../lib/graph-model.mjs';
+import { SOURCES, TYPE_FOLDERS as FOLDERS, normalizeData, buildEdges, createNodePaths, isMechanicalRelation } from '../lib/graph-model.mjs';
 import { fileURLToPath } from 'node:url';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
@@ -48,7 +48,7 @@ function parseCuratedLinks(sourceNode, curated, pathToId) {
     const targetPath = match[2].trim().replace(/\.md$/i, '');
     const target = pathToId.get(targetPath);
 
-    if (!relation || /^(?:related|references|synergizes)(?:\s+with)?$/i.test(relation)) {
+    if (!isMechanicalRelation(relation)) {
       throw new Error(sourceNode.id + ': use a specific mechanical relation for ' + targetPath);
     }
     if (!target || target === sourceNode.id) {

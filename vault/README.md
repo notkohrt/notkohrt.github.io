@@ -44,6 +44,6 @@ Examples:
 
 When the generator runs, those curated links are exported to `data/manual-links.json`. The public graph loads that file and renders curated edges distinctly from relationships inferred from game text.
 
-Use a specific mechanical relationship and an existing target path. Bare `references`, `related`, and `synergizes` links are rejected, and unknown targets stop generation before any authored notes are rewritten.
+Use a specific mechanical relationship and an existing target path. Bare `references`, `related`, `synergizes`, `interacts with`, `uses Stars`, and `uses keyword` links are rejected by the same policy as the public graph. Unknown targets and invalid verbs stop generation before any authored notes or exported links are rewritten.
 
 The generated sections can be rebuilt whenever STS2 changes. The curated block is the human-authored layer.

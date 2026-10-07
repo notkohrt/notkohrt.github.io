@@ -126,6 +126,8 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
   border-radius:6px;padding:5px 8px;font-size:10px;z-index:4
 }
 .graph-summary{left:12px;bottom:11px;color:#888}
+.connection-caption{position:absolute;top:54px;left:12px;max-width:min(420px,calc(100% - 24px));display:flex;align-items:center;gap:8px;padding:7px 9px;background:rgba(30,30,30,.95);border:1px solid #6256a5;border-radius:6px;z-index:4;font-size:11px;color:#ddd}
+.connection-caption .icon-button{flex:0 0 auto}
 .physics-badge{right:12px;bottom:11px;color:#9589df;border-color:#443d65}
 .physics-badge.active{color:#b9afff;border-color:#6256a5;box-shadow:0 0 16px rgba(127,109,242,.12)}
 .selection-hint{left:50%;bottom:12px;transform:translateX(-50%);color:#b0a7e8;border-color:#494263;background:rgba(37,34,49,.92)}
@@ -154,6 +156,16 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
 .relations-header span{font-size:9.5px;color:#696969}
 .relation{display:grid;grid-template-columns:7px minmax(0,1fr);gap:8px;padding:7px 5px;border:0;background:transparent;width:100%;text-align:left;border-radius:5px;cursor:pointer}
 .relation-name,.relation-type{display:block}
+.relation-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;border-radius:5px}
+.relation-row.traced{background:#302c3b;box-shadow:inset 2px 0 #a99ae9}
+.relation-trace{border:0;background:transparent;color:#a99ae9;margin-right:3px}
+.relation-trace:hover,.relation-trace[aria-pressed="true"]{background:#403850;color:#eee}
+.relationship-detail{margin:14px 0;padding:0 10px 8px;border:1px solid #494263;border-radius:6px;background:#25222d}
+.relationship-detail .relations-header{margin-top:8px;gap:6px}
+.relationship-detail .ghost-button{font-size:10px;min-height:32px;padding:0 6px}
+.relationship-detail p{font-size:11px;margin:8px 0;overflow-wrap:anywhere}
+.relationship-detail blockquote{margin:8px 0;padding-left:9px;border-left:2px solid #655ca2;font-size:11px;color:#cfcfcf;white-space:pre-line}
+.relationship-detail .relationship-origin{font-size:10px;color:#a99ae9}
 .relations-more{width:100%;margin-top:6px;min-height:36px}
 .relation:hover{background:#292929}
 .relation-dot{width:6px;height:6px;border-radius:50%;margin-top:5px}

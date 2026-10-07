@@ -8,7 +8,15 @@ The website is static HTML/CSS and a browser ES module. Pixi 7.4.2 renders the g
 
 Rendering is scheduled on simulation ticks and interaction changes. Settled layouts stop rebuilding edges; opening the quick switcher or hiding the tab pauses simulation work. Camera changes and selection still request a frame.
 
+`lib/graph-geometry.mjs` assigns deterministic lanes to parallel and reciprocal edges, clips paths outside their nodes, and aligns arrows with the curve tangent. Single edges use straight lines; only multiple relationships need curves. The force layout uses one spring per unordered entity pair so additional semantic roles do not change their attraction.
+
 `lib/graph-model.mjs` owns entity normalization, mention and mechanic parsers, ontology edges, character overrides, relationship families, and collision-safe vault paths. The browser, graph validator, and Obsidian generator import this same model. Change semantic rules there rather than maintaining separate browser and vault implementations.
+
+`buildEdges` runs the card-type, tag, and character-mechanic parsers for every description as well as entity mentions, effects, and resources. Their endpoints include concrete Orbs, Summon, Osty commands, Forge, Replay, Stars, and card-type operations. Bare “interacts with” and “uses Stars” fallback labels are excluded. Tests exercise all five characters and card/power counterparts to catch missing parser integration.
+
+Family labels and colors also live in the shared model. Keyword/tag membership has its own filter; upgrades, shuffling, automatic play, HP-loss limits, and other generated roles have specific families instead of falling into “Other.” Custom authored verbs can still use that fallback.
+
+Each inspector relationship has a “Show connection” control. It highlights the directed path and its endpoints, labels the verb on the canvas, and shows the source entity's text without changing the selected note or shareable URL. Tracing reveals hidden endpoints and preserves edge filters; local direction toggles still govern the rest of the neighborhood. Changing filters clears a trace that is no longer visible. On mobile, tracing closes the reading drawer to reveal the graph; reopening Note retains the selected entity.
 
 Use Node 20, matching CI:
 
@@ -46,11 +54,13 @@ This reads the pinned repository data and existing curated blocks, and writes en
 
 ## Relationship policy
 
-An edge should explain a mechanical interaction. A bare text mention is not enough. This applies to curated links as well: `references`, `related`, and `synergizes` are not mechanical relationships.
+An edge should explain a mechanical interaction. A bare text mention is not enough. This applies to curated links as well: `references`, `related`, `synergizes`, `interacts with`, and bare `uses Stars`/`uses keyword` are not mechanical relationships. The validator and vault curator parser share this policy in `isMechanicalRelation`.
 
 Prefer explicit and high-confidence relationships such as `creates`, `applies`, `grants`, `triggers on`, `scales with`, `requires`, `moves from/to`, `channels`, `evokes`, `forges`, or a similarly precise verb. Subjective deck-building synergy should not be represented as a factual mechanical edge.
 
 Parse each mention in its own clause. In “Whenever you apply Poison, gain Strength,” Poison is the trigger and Strength is the reward. Keep both roles when one target is mentioned twice, honor negated actions, and prefer a full entity name over overlapping shorter names. Exceptional character overrides replace inferred relationships for that source/target pair.
+
+Effect parsing separates conditions from rewards at commas, periods, and semicolons; published line breaks can wrap a sentence. Match each effect in its own clause and retain each distinct role. “Whenever you draw an Ethereal card, draw 1 card” both triggers on draw and draws. “Whenever you apply Vulnerable, draw 1 card” only draws. Resource edges must also distinguish triggering on Block/HP loss, granting Block/Energy, preventing gain, and limiting loss. Inflected verbs share a vocabulary, and negation belongs to its own action rather than a later action in the sentence.
 
 Relationship-family coloring follows the role before the object: “triggers on card creation” is a trigger and “requires Doom application” is a requirement. Regression tests cover these distinctions.
 
@@ -64,4 +74,4 @@ Relationship-family coloring follows the role before the object: “triggers on 
 
 The validator rejects duplicate IDs/paths, missing rule and manual endpoints, self edges, bare mentions, generic damage/play hubs, and unpinned metadata. It reports entity/character coverage and relationship-family counts. Some IDs in the upstream `card_powers.json` are absent from its entity lists; these are reported as `unresolved_card_power_mappings`, excluded from emitted edges, and kept separate from validation failures. Review these diagnostics during data updates instead of inventing replacement powers or altering the pinned input.
 
-GitHub Actions runs semantic/vault checks and browser checks on pushes and pull requests. The scheduled data-refresh workflow runs the same semantic/vault checks before opening a snapshot update PR; parser regressions require review when upstream mechanics change.
+GitHub Actions runs semantic/vault and geometry checks plus browser checks on pushes to `main`, `feat/sts2-graph-clean`, and `codex/**`, and on pull requests to `main`. Browser checks cover tracing and parallel roles, backlink source text, keyboard focus, filter invalidation, and mobile reading/graph transitions. The scheduled data-refresh workflow runs the same semantic/vault checks before opening a snapshot update PR; parser regressions require review when upstream mechanics change.

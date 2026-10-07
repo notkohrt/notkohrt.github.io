@@ -1,41 +1,10 @@
-import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, createNodePaths } from './lib/graph-model.mjs';
+import { SOURCES, SOURCE_META_URL, RELATION_FAMILIES, normalizeData, buildEdges, relationFamily, createNodePaths } from './lib/graph-model.mjs';
+import { assignEdgeLanes, edgeGeometry, uniqueLayoutLinks } from './lib/graph-geometry.mjs';
 
 (() => {
-  const RELATION_FAMILY_LABELS = {
-    creation: 'Create / transform',
-    application: 'Apply / grant',
-    trigger: 'Triggers / payoffs',
-    scaling: 'Scaling',
-    requirement: 'Requirements',
-    movement: 'Move / play',
-    modification: 'Modify / retain',
-    resource: 'Resources / actions',
-    other: 'Other'
-  };
-
-  const RELATION_FAMILY_COLORS = {
-    creation: 0x72b6d9,
-    application: 0x70b58a,
-    trigger: 0xd5a85f,
-    scaling: 0xb985d6,
-    requirement: 0xd27b72,
-    movement: 0x7f9fd1,
-    modification: 0xc58aa8,
-    resource: 0x8da56e,
-    other: 0x6f747c
-  };
-
-  const RELATION_FAMILY_CSS = {
-    creation: '#72b6d9',
-    application: '#70b58a',
-    trigger: '#d5a85f',
-    scaling: '#b985d6',
-    requirement: '#d27b72',
-    movement: '#7f9fd1',
-    modification: '#c58aa8',
-    resource: '#8da56e',
-    other: '#6f747c'
-  };
+  const RELATION_FAMILY_LABELS = Object.fromEntries(Object.entries(RELATION_FAMILIES).map(([id, family]) => [id, family.label]));
+  const RELATION_FAMILY_CSS = Object.fromEntries(Object.entries(RELATION_FAMILIES).map(([id, family]) => [id, family.color]));
+  const RELATION_FAMILY_COLORS = Object.fromEntries(Object.entries(RELATION_FAMILIES).map(([id, family]) => [id, Number.parseInt(family.color.slice(1), 16)]));
 
   const TYPE_COLORS = {
     card: 0x8b83d6,
@@ -77,12 +46,14 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
     nodes: [],
     edges: [],
     byId: new Map(),
+    edgeById: new Map(),
     nodePaths: new Map(),
     outAdj: new Map(),
     inAdj: new Map(),
 
     pixi: null,
     renderPending: null,
+    fitTimer: null,
     world: null,
     edgeLayer: null,
     nodeLayer: null,
@@ -90,6 +61,7 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
     overlayLayer: null,
     hoverLabel: null,
     focusLabel: null,
+    relationshipLabel: null,
     nodeViews: new Map(),
     staticLabels: new Map(),
 
@@ -99,6 +71,7 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
     simulation: null,
 
     focusedId: null,
+    tracedEdgeId: null,
     hoveredId: null,
     viewMode: 'global',
     depth: 1,
@@ -146,6 +119,7 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
 
   function buildAdjacency() {
     state.byId = new Map(state.nodes.map(n => [n.id, n]));
+    state.edgeById = new Map(state.edges.map(edge => [edge.id, edge]));
     state.outAdj = new Map();
     state.inAdj = new Map();
 
@@ -201,9 +175,11 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
 
     state.hoverLabel = makeOverlayLabel();
     state.focusLabel = makeOverlayLabel();
-    state.overlayLayer.addChild(state.hoverLabel, state.focusLabel);
+    state.relationshipLabel = makeOverlayLabel();
+    state.overlayLayer.addChild(state.hoverLabel, state.focusLabel, state.relationshipLabel);
     state.hoverLabel.visible = false;
     state.focusLabel.visible = false;
+    state.relationshipLabel.visible = false;
 
     state.pixi.stage.on('pointerdown', onStagePointerDown);
     state.pixi.stage.on('pointermove', onStagePointerMove);
@@ -235,6 +211,14 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
     });
   }
 
+  function scheduleFit(callback, delay) {
+    clearTimeout(state.fitTimer);
+    state.fitTimer = setTimeout(() => {
+      state.fitTimer = null;
+      callback();
+    }, delay);
+  }
+
   function syncAnimation() {
     const paused = document.hidden || !$('palette-backdrop').classList.contains('hidden');
     if (paused) state.simulation?.stop();
@@ -253,6 +237,7 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
       strokeThickness: 4,
       align: 'center'
     });
+    label.resolution = state.pixi.renderer.resolution * 2;
     label.anchor.set(0.5, 0);
     label.eventMode = 'none';
     return label;
@@ -330,12 +315,15 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
 
     const selected = state.focusedId === node.id;
     const hovered = state.hoveredId === node.id;
-    const related = !state.focusedId || state.viewMode === 'local' || isDirectNeighbor(node.id);
+    const traced = state.edgeById.get(state.tracedEdgeId);
+    const endpoint = traced && (node.id === traced.source || node.id === traced.target);
+    const related = traced ? endpoint : !state.focusedId || state.viewMode === 'local' || isDirectNeighbor(node.id);
     const circle = view._circle;
 
     circle.clear();
 
-    if (selected) circle.lineStyle(2.3, 0xb8adff, 1);
+    if (endpoint) circle.lineStyle(2.6, RELATION_FAMILY_COLORS[relationFamily(traced.relation)], 1);
+    else if (selected) circle.lineStyle(2.3, 0xb8adff, 1);
     else if (hovered) circle.lineStyle(1.8, 0x9c8df4, 1);
     else circle.lineStyle(0.8, 0x161616, 0.95);
 
@@ -397,16 +385,18 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
   function rebuildSimulation() {
     if (state.simulation) state.simulation.stop();
 
+    const lanes = assignEdgeLanes(state.visibleEdges);
     state.simEdges = state.visibleEdges.map(edge => ({
       id: edge.id,
-      source: edge.source,
-      target: edge.target,
+      source: state.byId.get(edge.source),
+      target: state.byId.get(edge.target),
       relation: edge.relation,
       family: relationFamily(edge.relation),
+      lane: lanes.get(edge.id),
       provenance: edge.provenance
     }));
 
-    const linkForce = d3.forceLink(state.simEdges)
+    const linkForce = d3.forceLink(uniqueLayoutLinks(state.visibleEdges))
       .id(d => d.id)
       .distance(state.settings.distance)
       .strength(state.settings.link);
@@ -478,7 +468,10 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
       const label = state.staticLabels.get(node.id);
       if (label) {
         label.position.set(node.x || 0, (node.y || 0) + node.radius + 4);
-        label.alpha = !state.focusedId || state.viewMode === 'local' || isDirectNeighbor(node.id) ? 0.9 : 0.08;
+        const traced = state.edgeById.get(state.tracedEdgeId);
+        const related = traced ? node.id === traced.source || node.id === traced.target : !state.focusedId || state.viewMode === 'local' || isDirectNeighbor(node.id);
+        if (traced && related && label.resolution < state.pixi.renderer.resolution * 2) label.resolution = state.pixi.renderer.resolution * 2;
+        label.alpha = related ? 0.9 : 0.08;
         label.visible = state.world.scale.x >= 0.38 || state.viewMode === 'local';
       }
     }
@@ -510,25 +503,17 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
 
   function drawEdges() {
     state.edgeLayer.clear();
+    state.relationshipLabel.visible = false;
+    const tracedId = state.tracedEdgeId;
+    const ordered = tracedId ? [...state.simEdges.filter(edge => edge.id !== tracedId), ...state.simEdges.filter(edge => edge.id === tracedId)] : state.simEdges;
 
-    for (const edge of state.simEdges) {
+    for (const edge of ordered) {
       const source = edge.source;
       const target = edge.target;
-      if (!source || !target || !Number.isFinite(source.x) || !Number.isFinite(target.x)) continue;
-
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      const length = Math.hypot(dx, dy);
-      if (length < 1) continue;
-
-      const ux = dx / length;
-      const uy = dy / length;
-      const sourceRadius = source.radius || 4;
-      const targetRadius = target.radius || 4;
-      const startX = source.x + ux * Math.min(sourceRadius + 1, length * 0.25);
-      const startY = source.y + uy * Math.min(sourceRadius + 1, length * 0.25);
-      const endX = target.x - ux * Math.min(targetRadius + 2, length * 0.3);
-      const endY = target.y - uy * Math.min(targetRadius + 2, length * 0.3);
+      const geometry = edgeGeometry(source, target, edge.lane);
+      if (!geometry) continue;
+      const { start, control, end, tangent, midpoint } = geometry;
+      const ux = tangent.x, uy = tangent.y;
 
       const family = edge.family || relationFamily(edge.relation);
       let color = RELATION_FAMILY_COLORS[family] || RELATION_FAMILY_COLORS.other;
@@ -556,22 +541,35 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
         }
       }
 
+      if (tracedId) {
+        emphasize = edge.id === tracedId;
+        alpha = emphasize ? 1 : 0.025;
+        width = emphasize ? 2.4 : 0.6;
+      }
+
       state.edgeLayer.lineStyle(width, color, alpha);
-      state.edgeLayer.moveTo(startX, startY);
-      state.edgeLayer.lineTo(endX, endY);
+      state.edgeLayer.moveTo(start.x, start.y);
+      if (edge.lane) state.edgeLayer.quadraticCurveTo(control.x, control.y, end.x, end.y);
+      else state.edgeLayer.lineTo(end.x, end.y);
+
+      if (edge.id === tracedId) {
+        state.relationshipLabel.text = edge.relation;
+        state.relationshipLabel.position.set(midpoint.x, midpoint.y + 8);
+        state.relationshipLabel.visible = true;
+      }
 
       const showArrow = emphasize || (state.viewMode === 'local' && state.visibleEdges.length <= 90);
       if (showArrow && alpha > 0.08) {
         const arrowLength = 7;
         const arrowWidth = 3.4;
-        const baseX = endX - ux * arrowLength;
-        const baseY = endY - uy * arrowLength;
+        const baseX = end.x - ux * arrowLength;
+        const baseY = end.y - uy * arrowLength;
         const px = -uy;
         const py = ux;
 
         state.edgeLayer.beginFill(color, Math.min(0.9, alpha + 0.08));
         state.edgeLayer.drawPolygon([
-          endX, endY,
+          end.x, end.y,
           baseX + px * arrowWidth, baseY + py * arrowWidth,
           baseX - px * arrowWidth, baseY - py * arrowWidth
         ]);
@@ -747,6 +745,7 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
   }
 
   function fitGraph() {
+    clearTimeout(state.fitTimer);
     if (!state.visibleNodes.length || !state.pixi) return;
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -964,6 +963,8 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
     });
     $('palette-input').addEventListener('input', updatePalette);
     $('palette-input').addEventListener('keydown', handlePaletteKeys);
+    $('clear-connection').addEventListener('click', () => traceRelationship(null));
+    $('clear-connection-caption').addEventListener('click', () => traceRelationship(null));
     for (const direction of ['outgoing', 'incoming']) {
       const list = $(direction === 'outgoing' ? 'outgoing-list' : 'backlinks-list');
       list.addEventListener('click', e => {
@@ -971,11 +972,14 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
         if (relation) {
           focusNode(relation.dataset.target);
           $('entity-name').focus({ preventScroll: true });
+        } else if (e.target.closest('.relation-trace')) {
+          const id = e.target.closest('.relation-trace').dataset.edgeId;
+          traceRelationship(state.tracedEdgeId === id ? null : id);
         } else if (e.target.closest('.relations-more')) {
           state.inspectorLimits[direction] += 50;
           renderInspector(state.focusedId);
           const more = list.querySelector('.relations-more');
-          (more || list.querySelector('.relation:last-child'))?.focus({ preventScroll: true });
+          (more || list.querySelector('.relation-row:last-child .relation'))?.focus({ preventScroll: true });
         }
       });
     }
@@ -1007,6 +1011,7 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
         if (!$('palette-backdrop').classList.contains('hidden')) closePalette();
         else if (window.innerWidth <= 900 && $('filters-panel').classList.contains('open')) setPanelOpen('filters', false);
         else if (window.innerWidth <= 900 && $('inspector-panel').classList.contains('open')) setPanelOpen('inspector', false);
+        else if (state.tracedEdgeId) traceRelationship(null);
         else clearFocus();
       }
     });
@@ -1104,6 +1109,10 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
       if (!frontier.size) break;
     }
 
+    const traced = state.edgeById.get(state.tracedEdgeId);
+    if (traced && edgePassesFilters(traced)) {
+      for (const id of [traced.source, traced.target]) if (baseAllowed.has(id)) found.add(id);
+    }
     return found;
   }
 
@@ -1173,6 +1182,8 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
 
     state.visibleNodes = [...visible].map(id => state.byId.get(id)).filter(Boolean);
     state.visibleEdges = visibleEdges;
+    if (state.tracedEdgeId && !visibleEdges.some(edge => edge.id === state.tracedEdgeId)) state.tracedEdgeId = null;
+    syncRelationshipTrace();
 
     rebuildScene();
 
@@ -1181,7 +1192,7 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
     $('graph-summary').textContent = modeLabel + colorLabel + ' · ' + state.visibleNodes.length + ' nodes · ' + state.visibleEdges.length + ' links';
     $('selection-hint').classList.toggle('hidden', !(state.viewMode === 'local' && !state.focusedId));
 
-    if (shouldFit) setTimeout(fitGraph, 160);
+    if (shouldFit) scheduleFit(fitGraph, 160);
   }
 
   function updateAllNodeStyles() {
@@ -1196,14 +1207,9 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
     // Navigation must also reveal a note excluded by the current character or
     // node filters. Edge filters remain useful while reading that note.
     const reveal = !state.visibleNodes.some(visible => visible.id === id);
-    if (reveal) {
-      $('search-input').value = '';
-      for (const filter of ['color-filter', 'rarity-filter', 'card-type-filter', 'cost-filter']) $(filter).value = 'all';
-      state.visibleTypes.add(node.type);
-      const typeBox = $('type-filters').querySelector('input[data-type="' + node.type + '"]');
-      if (typeBox) typeBox.checked = true;
-    }
+    if (reveal) revealNodeFilters([id]);
 
+    state.tracedEdgeId = null;
     state.focusedId = id;
     if (writeUrl) setNodeInUrl(id, false);
     document.title = node.name + ' — STS2 Bubble';
@@ -1215,7 +1221,7 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
       applyFilters(true);
     } else {
       updateAllNodeStyles();
-      setTimeout(() => fitNeighborhood(id), 20);
+      scheduleFit(() => fitNeighborhood(id), 20);
     }
 
     if (window.innerWidth <= 900) setPanelOpen('inspector', true);
@@ -1227,7 +1233,12 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
     for (const edge of state.outAdj.get(id) || []) ids.add(edge.target);
     for (const edge of state.inAdj.get(id) || []) ids.add(edge.source);
 
-    const nodes = [...ids].map(nodeIdValue => state.byId.get(nodeIdValue)).filter(node => node && state.nodeViews.has(node.id));
+    fitNodes([...ids]);
+  }
+
+  function fitNodes(ids) {
+    clearTimeout(state.fitTimer);
+    const nodes = ids.map(id => state.byId.get(id)).filter(node => node && state.nodeViews.has(node.id));
     if (!nodes.length) return;
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -1260,6 +1271,8 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
 
   function clearFocus(writeUrl = true) {
     state.focusedId = null;
+    state.tracedEdgeId = null;
+    syncRelationshipTrace();
     if (writeUrl) setNodeInUrl(null, false);
     document.title = 'STS2 Bubble — Slay the Spire 2 Interaction Graph';
     $('clear-focus').disabled = true;
@@ -1282,12 +1295,16 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
       edge.provenance === 'name-match' ? 'matched' : 'text';
 
     const family = relationFamily(edge.relation);
-    return '<button type="button" class="relation" data-target="' + htmlEsc(node.id) + '">' +
+    const source = state.byId.get(edge.source), target = state.byId.get(edge.target);
+    const summary = source.name + ' → ' + edge.relation + ' → ' + target.name;
+    return '<div class="relation-row"><button type="button" class="relation" data-target="' + htmlEsc(node.id) + '">' +
       '<span class="relation-dot" style="background:' + TYPE_CSS[node.type] + '"></span>' +
       '<span><span class="relation-name">' + htmlEsc(node.name) + '</span>' +
       '<span class="relation-type"><span class="relation-family-dot" style="background:' + RELATION_FAMILY_CSS[family] + '"></span>' +
       htmlEsc(direction + ' · ' + edge.relation) +
-      ' · <span class="relation-provenance">' + htmlEsc(provenance) + '</span></span></span></button>';
+      ' · <span class="relation-provenance">' + htmlEsc(provenance) + '</span></span></span></button>' +
+      '<button type="button" class="relation-trace icon-button" data-edge-id="' + htmlEsc(edge.id) + '" aria-label="' + htmlEsc('Show connection: ' + summary) + '" aria-pressed="false" title="Show this connection on the graph">' +
+      '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M4 12 12 4M5 4h7v7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>';
   }
 
   function renderInspector(id) {
@@ -1383,6 +1400,62 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
     };
     $('outgoing-list').innerHTML = renderRelations(outgoing, 'outgoing', 'outgoing links');
     $('backlinks-list').innerHTML = renderRelations(incoming, 'incoming', 'backlinks');
+    syncRelationshipTrace();
+  }
+
+  function revealNodeFilters(ids) {
+    $('search-input').value = '';
+    for (const filter of ['color-filter', 'rarity-filter', 'card-type-filter', 'cost-filter']) $(filter).value = 'all';
+    for (const id of ids) {
+      const node = state.byId.get(id);
+      if (!node) continue;
+      state.visibleTypes.add(node.type);
+      const typeBox = $('type-filters').querySelector('input[data-type="' + node.type + '"]');
+      if (typeBox) typeBox.checked = true;
+    }
+  }
+
+  function syncRelationshipTrace() {
+    const edge = state.edgeById.get(state.tracedEdgeId);
+    $('relationship-detail').classList.toggle('hidden', !edge);
+    $('connection-caption').classList.toggle('hidden', !edge);
+    for (const button of document.querySelectorAll('.relation-trace')) {
+      const active = button.dataset.edgeId === state.tracedEdgeId;
+      button.setAttribute('aria-pressed', String(active));
+      button.closest('.relation-row').classList.toggle('traced', active);
+    }
+    if (!edge) return;
+    const source = state.byId.get(edge.source), target = state.byId.get(edge.target);
+    const summary = source.name + ' → ' + edge.relation + ' → ' + target.name;
+    $('relationship-summary').textContent = summary;
+    $('connection-caption-text').textContent = summary;
+    $('connection-caption').dataset.edgeId = edge.id;
+    $('relationship-evidence').textContent = source.description || 'No source description available.';
+    $('relationship-origin').textContent = edge.note || ({ explicit: 'Entity metadata', curated: 'Curated mechanical rule', derived: 'Parsed from the source description', 'name-match': 'Card and power name mapping' }[edge.provenance] || 'Source description');
+  }
+
+  function traceRelationship(id) {
+    const edge = state.edgeById.get(id);
+    if (id && (!edge || !edgePassesFilters(edge))) return;
+    const previous = state.tracedEdgeId;
+    const restoreFocus = !id && (document.activeElement.closest('#relationship-detail, #connection-caption'));
+    state.tracedEdgeId = id;
+    const reveal = edge && [edge.source, edge.target].some(id => !state.nodeViews.has(id));
+    if (reveal) revealNodeFilters([edge.source, edge.target]);
+    // Changing roles on an already visible pair only needs a render. Rebuild
+    // local topology when a trace adds or removes a hidden-direction endpoint.
+    const localChanged = state.viewMode === 'local' && collectLocal(state.focusedId, new Set(state.visibleNodes.map(node => node.id))).size !== state.visibleNodes.length;
+    if (reveal || localChanged) applyFilters(false);
+    else updateAllNodeStyles();
+    syncRelationshipTrace();
+    if (edge) {
+      fitNodes([edge.source, edge.target]);
+      if (window.innerWidth <= 900) setPanelOpen('inspector', false);
+    }
+    if (restoreFocus) {
+      const button = [...document.querySelectorAll('.relation-trace')].find(button => button.dataset.edgeId === previous);
+      (button && !button.closest('[inert]') ? button : $('inspector-toggle')).focus({ preventScroll: true });
+    }
   }
 
   function resetFilters() {
@@ -1529,7 +1602,7 @@ import { SOURCES, SOURCE_META_URL, normalizeData, buildEdges, relationFamily, cr
         setNodeInUrl(null, true);
       }
 
-      setTimeout(() => initialNode ? fitNeighborhood(initialNode) : fitGraph(), 500);
+      scheduleFit(() => initialNode ? fitNeighborhood(initialNode) : fitGraph(), 500);
 
       $('loading-state').classList.add('hidden');
       $('dataset-status').classList.add('ready');
