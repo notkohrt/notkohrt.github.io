@@ -1,4 +1,4 @@
-# STS2 Bubble Vault
+# STS2 Stars Vault
 
 This folder is designed to be opened directly as an **Obsidian vault**.
 
@@ -52,6 +52,6 @@ The generated sections can be rebuilt whenever STS2 changes. The curated block i
 
 ## Credits
 
-Slay the Spire 2 and its game content are by [Mega Crit](https://www.megacrit.com/). STS2 Bubble is an unofficial fan project. Generated entity notes include this credit so it stays with individually shared notes.
+Slay the Spire 2 and its game content are by [Mega Crit](https://www.megacrit.com/). STS2 Stars is an unofficial fan project. Generated entity notes include this credit so it stays with individually shared notes.
 
 Permission to use artwork in notes has been requested from Mega Crit; a response is pending. The repository's `CREDITS.md` tracks the request and any future granted scope.

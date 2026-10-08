@@ -10,6 +10,7 @@ import { verifyChecksums, writeChecksums } from '../lib/build-integrity.mjs';
 import { loadSnapshot } from './load-snapshot.mjs';
 import { renderPreview } from './build-preview.mjs';
 import { buildVault, extractCurated, noteContent, parseCuratedLinks } from './build-vault.mjs';
+import { PROJECT_NAME, PROJECT_SLUG } from '../lib/project.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const git = promisify(execFile);
@@ -73,7 +74,7 @@ export async function verifyV1(input) {
 }
 
 function openingInstructions(manifest) {
-  return `# STS2 Bubble v${manifest.version}
+  return `# ${PROJECT_NAME} v${manifest.version}
 
 Extract the downloaded ZIP before opening its files.
 
@@ -96,7 +97,7 @@ This package contains the website, notes, and pinned data. For complete source h
 `;
 }
 
-export async function buildV1(output = path.join(ROOT, 'dist/sts2-bubble-v1')) {
+export async function buildV1(output = path.join(ROOT, 'dist', PROJECT_SLUG + '-v1')) {
   try {
     await lstat(path.join(ROOT, 'data/.sts2-update'));
     throw new Error('Finish or recover the snapshot transaction before building.');
@@ -118,7 +119,8 @@ export async function buildV1(output = path.join(ROOT, 'dist/sts2-bubble-v1')) {
   ]);
   const pkg = JSON.parse(packageText);
   const locked = JSON.parse(lock);
-  if (!/^1\.\d+\.\d+$/.test(pkg.version || '') || locked.version !== pkg.version || locked.packages[''].version !== pkg.version ||
+  if (!/^1\.\d+\.\d+$/.test(pkg.version || '') || locked.name !== pkg.name || locked.packages[''].name !== pkg.name ||
+      locked.version !== pkg.version || locked.packages[''].version !== pkg.version ||
       !isDeepStrictEqual(pkg.devDependencies, locked.packages[''].devDependencies)) {
     throw new Error('Build version and dependencies must match package-lock.json.');
   }

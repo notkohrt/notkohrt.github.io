@@ -1,6 +1,6 @@
 {
-  "name": "sts2-bubble",
-  "version": "1.0.1",
+  "name": "sts2-stars",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "scripts": {

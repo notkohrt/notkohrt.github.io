@@ -1,4 +1,4 @@
-# STS2 Bubble
+# STS2 Stars
 
 This is the authoring vault behind the public graph at notkohrt.pro.
 

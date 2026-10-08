@@ -1,6 +1,6 @@
-# STS2 Bubble community launch
+# STS2 Stars community launch
 
-Working draft for the website and optional Obsidian vault, targeting **r/SlayTheSpire2**. The currently deployed build is v1.0.1. Keep the **STS2 Bubble** name; `sts2bubble.com` is the preferred domain candidate, subject to availability and registration.
+Working draft for the v1.0.2 website and optional Obsidian vault, targeting **r/SlayTheSpire2**. Use **STS2 Stars** as the project name; `sts2stars.com` is the preferred domain candidate, subject to availability and registration.
 
 ## Launch order
 
@@ -13,17 +13,17 @@ Mega Crit attribution stays in the website and distribution. The pending artwork
 
 ## Project domain
 
-Selected naming direction: retain **STS2 Bubble** so the name in the app, post, and domain agrees.
+Selected naming direction: **STS2 Stars**, with **sts2stars** for domain naming, so the name in the app, post, and domain agrees.
 
 Candidates, with availability unverified:
 
 | Candidate | Reason |
 | --- | --- |
-| `sts2bubble.com` | Matches the existing project name; first choice. |
-| `sts2bubble.net` | Keeps the exact name with a familiar alternative suffix. |
-| `sts2bubble.app` | Keeps the exact name and describes a browser app. |
+| `sts2stars.com` | Matches the project name; first choice. |
+| `sts2stars.net` | Keeps the exact name with a familiar alternative suffix. |
+| `sts2stars.app` | Keeps the exact name and describes a browser app. |
 
-A registry lookup for `sts2bubble.com` was blocked by this cloud's network proxy on 2026-10-08. Availability is unverified for every candidate above; these are naming suggestions, not claims of availability or price. Confirm registration and renewal cost at a registrar before choosing.
+Registry access was blocked by this cloud's network proxy on 2026-10-08 while checking the previous naming candidate. Availability is unverified for every STS2 Stars candidate above; these are naming suggestions, not claims of availability or price. Confirm registration and renewal cost at a registrar before choosing.
 
 When a domain is chosen, update the Pages custom domain and DNS, repository `CNAME`, canonical/Open Graph/Twitter URLs in `src/index.html`, and the base URL in `playwright.production.config.mjs`. Regenerate `index.html`, update public documentation and post links, and run existing validation plus the live production checks. Preserve the current live site until the replacement is ready. Each GitHub Pages site has one configured custom domain; decide which Pages site will serve the developer domain if both sites will use GitHub Pages. This document makes no hosting or DNS changes.
 
@@ -31,11 +31,11 @@ When a domain is chosen, update the Pages custom domain and DNS, repository `CNA
 
 ### Title
 
-I built STS2 Bubble: a searchable map of Slay the Spire 2 mechanics
+I built STS2 Stars: a searchable map of Slay the Spire 2 mechanics
 
 ### Body
 
-I've been working on **STS2 Bubble**, an interactive graph for exploring how cards, relics, powers, and other Slay the Spire 2 mechanics connect.
+I've been working on **STS2 Stars**, an interactive graph for exploring how cards, relics, powers, and other Slay the Spire 2 mechanics connect.
 
 **Try it:** [project website — add the final domain]
 

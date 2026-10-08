@@ -1,4 +1,4 @@
-# STS2 Bubble development
+# STS2 Stars development
 
 The public graph is intentionally built from a **pinned local snapshot** of Spire Archive rather than reading `main` at runtime. This keeps relationships reproducible while Slay the Spire 2 is changing during Early Access.
 
@@ -49,7 +49,7 @@ For a portable preview that can be opened as a single file:
 npm run build:preview
 ```
 
-Open `dist/sts2-bubble-preview.html` in a browser, or pass `-- --output /tmp/preview.html` to write elsewhere. The builder validates the snapshot, embeds the stylesheet, bundles the same app/model/geometry with the exact locked Pixi/d3 versions, and includes every pinned JSON file plus curated links. No server or network request is needed. This is a generated artifact; edit the shared source files and regenerate it. CI checks deterministic snapshot parity, exercises a single HTML response with all asset/external requests blocked, and uploads the HTML for review.
+Open `dist/sts2-stars-preview.html` in a browser, or pass `-- --output /tmp/preview.html` to write elsewhere. The builder validates the snapshot, embeds the stylesheet, bundles the same app/model/geometry with the exact locked Pixi/d3 versions, and includes every pinned JSON file plus curated links. No server or network request is needed. This is a generated artifact; edit the shared source files and regenerate it. CI checks deterministic snapshot parity, exercises a single HTML response with all asset/external requests blocked, and uploads the HTML for review.
 
 Self-contained HTML still needs a browser that runs JavaScript and supports WebGL. iPhone/iPad Files Quick Look can render the static page while leaving scripts unexecuted. Use a hosted copy in Safari on those devices. The initial HTML shows browser-opening guidance with no spinner; `boot` switches to loading only when JavaScript runs. Data and renderer failures stop the spinner and retain actionable guidance. Initialization also handles a module executing after `DOMContentLoaded`, so delayed script evaluation cannot leave a working browser waiting forever.
 
@@ -66,9 +66,11 @@ The builder uses the same website renderer and vault generator without rewriting
 
 `manifest.json` records v1's package version, full source commit, local-change status, exact Node/dependency versions, lockfile SHA-256, snapshot metadata, and entity/relationship counts. No wall-clock timestamp enters the build, so unchanged inputs produce identical files and checksums. Local builds with source edits are clearly marked as development builds; reproducible distributions use a clean commit. CI packages before its in-checkout vault generation so the source status stays clean. `SHA256SUMS` covers every other packaged file, including the manifest. These hashes detect corruption or edits; they do not authenticate the publisher.
 
-Verification rejects missing, extra, duplicate, unsafe, symlinked, or changed files; compares the embedded website snapshot to the packaged data; and checks every entity note and curated export against the shared model. Use the verifier from the recorded source commit when checking an older build whose semantic parsers may differ. Browser tests exercise the packaged `index.html` with all linked assets and external requests blocked, including mobile navigation and connection tracing.
+Verification rejects missing, extra, duplicate, unsafe, symlinked, or changed files; compares the embedded website snapshot to the packaged data; and checks every entity note and curated export against the shared model. Use the verifier from the recorded source commit when checking an older build whose semantic parsers or note templates may differ. Browser tests exercise the packaged `index.html` with all linked assets and external requests blocked, including mobile navigation and connection tracing.
 
-Download **sts2-bubble-v1** from a successful validation run's Artifacts section, sign in to GitHub if prompted, and extract the ZIP before opening `index.html` or the `vault` folder. Actions retains this artifact for 90 days. A workspace file link is not a registered ChatGPT download artifact and can produce “could not download artifact”; use the GitHub artifact link and keep an independent copy. The complete build is an export; the separate recovery artifact preserves source history and authored state for restoration.
+Download **sts2-stars-v1** from a successful validation run's Artifacts section, sign in to GitHub if prompted, and extract the ZIP before opening `index.html` or the `vault` folder. Actions retains this artifact for 90 days. A workspace file link is not a registered ChatGPT download artifact and can produce “could not download artifact”; use the GitHub artifact link and keep an independent copy. The complete build is an export; the separate recovery artifact preserves source history and authored state for restoration.
+
+`lib/project.mjs` supplies the project name and slug to browser titles, export builders, and future snapshot metadata. Keep the static HTML branding, package metadata, CI artifact names, and documentation in sync. The existing `sts2-bubble-build-v1` and `sts2-bubble-recovery-v1` format identifiers are stable compatibility identifiers, retained across the STS2 Stars rename. The pinned snapshot's historical metadata is unchanged; rebranding does not rewrite game data or mechanics.
 
 ```sh
 npx playwright install chromium

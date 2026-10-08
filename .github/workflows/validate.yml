@@ -42,12 +42,12 @@ jobs:
       - name: Build and verify the complete v1 website and vault package
         run: |
           npm run build:v1
-          npm run verify:v1 -- dist/sts2-bubble-v1
+          npm run verify:v1 -- dist/sts2-stars-v1
       - name: Upload the complete v1 build
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: sts2-bubble-v1
-          path: dist/sts2-bubble-v1/
+          name: sts2-stars-v1
+          path: dist/sts2-stars-v1/
           include-hidden-files: true
           retention-days: 90
           if-no-files-found: error
@@ -58,7 +58,7 @@ jobs:
       - name: Upload verified recovery package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: sts2-bubble-recovery
+          name: sts2-stars-recovery
           path: ${{ runner.temp }}/sts2-recovery/
           retention-days: 90
           if-no-files-found: error
@@ -67,13 +67,13 @@ jobs:
       - name: Upload standalone preview
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: sts2-bubble-preview
-          path: dist/sts2-bubble-preview.html
+          name: sts2-stars-preview
+          path: dist/sts2-stars-preview.html
           if-no-files-found: error
       - name: Upload the actual self-contained index.html
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: sts2-bubble-index
+          name: sts2-stars-index
           path: index.html
           if-no-files-found: error
       - name: Build Obsidian vault
@@ -88,7 +88,7 @@ jobs:
       - name: Upload Obsidian vault
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: sts2-bubble-obsidian-vault
+          name: sts2-stars-obsidian-vault
           path: vault/
           if-no-files-found: error
 

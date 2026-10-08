@@ -1,4 +1,5 @@
 import { SOURCES, TYPE_FOLDERS as FOLDERS, normalizeData, buildEdges, createNodePaths, isMechanicalRelation } from '../lib/graph-model.mjs';
+import { PROJECT_NAME } from '../lib/project.mjs';
 import { fileURLToPath } from 'node:url';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
@@ -101,7 +102,7 @@ export function noteContent(node, detectedOutgoing, curated) {
     '',
     '---',
     '',
-    'Slay the Spire 2 and its game content are by [Mega Crit](https://www.megacrit.com/). STS2 Bubble is an unofficial fan project.',
+    'Slay the Spire 2 and its game content are by [Mega Crit](https://www.megacrit.com/). ' + PROJECT_NAME + ' is an unofficial fan project.',
     ''
   ).join('\n');
 }
