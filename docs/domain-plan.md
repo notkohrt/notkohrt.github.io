@@ -1,8 +1,10 @@
 # STS2 Stars domain migration
 
-The user confirmed the purchase of **sts2stars.com** on 2026-10-08. The intended primary URL is **https://sts2stars.com/**, with `www.sts2stars.com` redirecting to it. A live registry RDAP lookup confirmed Squarespace Domains LLC as the registrar and `nsc1` through `nsc4.squarespacedns.com` as its nameservers. Domain selection and registration are complete; price comparison is no longer needed.
+The primary URL is **https://sts2stars.com/**, with `www.sts2stars.com` redirecting to it. The user confirmed the purchase on 2026-10-08. A registry RDAP lookup confirmed Squarespace Domains LLC as the registrar and `nsc1` through `nsc4.squarespacedns.com` as its nameservers.
 
-`notkohrt.pro` currently serves the graph and is intended for the developer site later. This branch prepares `CNAME`, generated canonical/sharing URLs, production checks, the vault entry page, and the community draft for the new domain. Preparation does not itself change Squarespace DNS or the live Pages setting. Keep the current site live until DNS is configured and the migration can be published.
+The migration is complete. GitHub Pages serves the new domain, its certificate covers both the apex and `www`, and **Enforce HTTPS** is enabled. [The deployment validation run](https://github.com/notkohrt/notkohrt.github.io/actions/runs/37822396574) passed all required checks plus live Chromium/WebKit checks for the exact website build, sharing image, redirects, and mobile search/relationship tracing. The setting and certificate were confirmed through the Pages API on 2026-10-08.
+
+`CNAME` supplies the domain for generated canonical/sharing URLs and production checks. The vault entry page and community draft use the same project URL. `notkohrt.pro` is reserved for the future developer site, which needs its own hosting destination.
 
 ## Squarespace DNS
 
@@ -33,7 +35,7 @@ GitHub recommends verifying the domain to protect its Pages association. In [per
 
 See [GitHub's domain verification instructions](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/verifying-your-custom-domain-for-github-pages).
 
-## Publish and verify
+## Maintain or change the domain
 
 1. Confirm the apex A records and `www` CNAME are configured in Squarespace. DNS propagation can take up to 24 hours.
 2. Run `npm run plan:domain -- sts2stars.com`, `npm run build:site`, and `npm run check`. Review `CNAME` and generated `index.html` together. Run the existing browser checks; required CI jobs must pass before merging.
@@ -44,4 +46,4 @@ See [GitHub's domain verification instructions](https://docs.github.com/en/pages
 
 The existing GitHub Pages hosting can serve the graph without additional paid hosting. A future developer site on `notkohrt.pro` needs its own hosting destination; each Pages site has one custom domain. Reassign that domain separately after the project migration works.
 
-The cloud can read registry and GitHub documentation HTTPS endpoints, but direct DNS resolution and requests to the project domains are currently blocked by its egress policy. This is a limitation of the local check, not evidence that the purchased domain is broken. Use the production workflow's live browser checks from GitHub's runner for deployment verification. Squarespace DNS editing and GitHub account-level domain verification require the user's account access.
+If cloud egress prevents direct DNS or website checks, use the production workflow's live browser checks from GitHub's runner. A blocked cloud request alone does not establish a domain failure. Squarespace DNS editing, GitHub account-level domain verification, and Pages settings changes may require the owner's account access; the integration could publish the CNAME change but could not enable HTTPS enforcement through the API.
