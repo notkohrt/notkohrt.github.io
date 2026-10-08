@@ -1,0 +1,45 @@
+name: Browser or interface bug
+description: Report loading, graph, search, inspector, or accessibility problems.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Test the hosted graph at https://sts2stars.com/.
+        On iPhone or iPad, use Safari; the Files HTML preview may not run JavaScript.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened, and what did you expect?
+      description: Include the relevant note, control, or error message.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include a public note link if it helps reproduce the problem.
+      placeholder: |
+        1. Open the website
+        2. Find ...
+        3. Select ...
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Device and browser
+      placeholder: "For example: iPhone with Safari, or Windows with Chrome"
+    validations:
+      required: true
+  - type: input
+    id: data-version
+    attributes:
+      label: Game-data version displayed on the site, if known
+      description: The graph uses a pinned snapshot, which may differ from your installed game.
+  - type: textarea
+    id: details
+    attributes:
+      label: Additional details
+      description: Screenshots, browser version, or console errors are helpful if available.

@@ -1,0 +1,53 @@
+name: Mechanical relationship correction
+description: Report a missing, extra, reversed, or incorrectly labeled connection.
+title: "[Relationship] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Edges should explain meaningful game mechanics. Include the effect or trigger
+        that supports the connection; a shared word or subjective synergy alone is insufficient.
+        The graph uses pinned game data, so mention newer game text when relevant.
+  - type: input
+    id: source
+    attributes:
+      label: Source card, relic, power, or other note
+      placeholder: "For example: Resonance"
+    validations:
+      required: true
+  - type: dropdown
+    id: correction
+    attributes:
+      label: What needs correcting?
+      options:
+        - Missing connection
+        - Connection should not exist
+        - Wrong direction
+        - Wrong relationship label
+    validations:
+      required: true
+  - type: textarea
+    id: connection
+    attributes:
+      label: Actual and expected connection
+      description: Include the target note and relationship verb if known.
+      placeholder: "Source → relationship → target, and how the graph should differ"
+    validations:
+      required: true
+  - type: textarea
+    id: mechanic
+    attributes:
+      label: Mechanical evidence
+      description: Quote game text or explain the effect, trigger, or condition. Mention upgraded text if relevant.
+    validations:
+      required: true
+  - type: input
+    id: note-link
+    attributes:
+      label: Public note link, if available
+  - type: input
+    id: data-version
+    attributes:
+      label: Game-data version displayed on the site, if known
+      description: If your evidence comes from a newer installed game, include that version too.
