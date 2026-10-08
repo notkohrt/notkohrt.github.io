@@ -4,7 +4,7 @@ The public graph is intentionally built from a **pinned local snapshot** of Spir
 
 ## Architecture and local development
 
-The website is a generated, self-contained `index.html`. It embeds the stylesheet, Pixi 7.4.2, d3 7.9.0, browser code, and pinned JSON snapshot, so an HTML-only preview can render the graph. The optional external tooltip widget loads asynchronously and cannot block graph startup. Deployment still serves static files and needs no npm runtime.
+The website is a generated, self-contained `index.html`. It embeds the stylesheet, Pixi 7.4.2, d3 7.9.0, browser code, and pinned JSON snapshot, so an HTML-only preview can render the graph. It loads no external runtime scripts. The graph's hover labels and inspector provide its reading UI. Deployment still serves static files and needs no npm runtime.
 
 Edit `src/index.html`, `styles.css`, `app.js`, and `lib/` as source files, then run `npm run build:site` to regenerate the root `index.html`. esbuild is an exact, lockfile-pinned development dependency. Generated HTML has a source notice and is marked generated for GitHub diff display. Do not hand-edit the generated file. `npm run check` rebuilds it in memory and rejects any mismatch, including changes to the pinned snapshot or curated links.
 
@@ -22,15 +22,17 @@ Each inspector relationship has a “Show connection” control. It highlights t
 
 The inspector searches all eligible outgoing links and backlinks before pagination. Combine note names, verbs, character names, entity types, and provenance terms; every search term must match. Mechanic-family selection uses the same shared family definitions as the graph, and ordering can follow note names or mechanical verbs. Counts and empty states reflect both graph relationship filters and the inspector's search. Searching never adds edges from description mentions, changes graph filters, or clears a highlighted connection. Opening a different note resets the search and family selection while preserving the preferred ordering. The pure `lib/inspector-model.mjs` index keeps all distinct directed roles and is checked across every pinned entity.
 
-Use Node 20, matching CI:
+Use Node 24 LTS at the exact version in `.nvmrc`, matching CI. Node 20 is out of support. With nvm installed:
 
 ```sh
+nvm install
+nvm use
 npm ci --ignore-scripts
 npm run check
 python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
-`package.json` contains development dependencies only. Browser tests use the exact pinned Pixi/d3 distributions from the integrity-checked lockfile and omit the optional tooltip widget, so graph checks are independent of external CDN availability.
+`package.json` contains development dependencies only, including libraries bundled into the public page. Browser tests use the exact pinned Pixi/d3 distributions from the integrity-checked lockfile. Source-mode CDN scripts additionally require SHA-384 integrity matching those distributions; the builder rejects missing or mismatched integrity and unexpected script sources.
 
 After source or data changes:
 
@@ -47,7 +49,7 @@ For a portable preview that can be opened as a single file:
 npm run build:preview
 ```
 
-Open `dist/sts2-bubble-preview.html` in a browser, or pass `-- --output /tmp/preview.html` to write elsewhere. The builder validates the snapshot, embeds the stylesheet, bundles the same app/model/geometry with the exact locked Pixi/d3 versions, and includes every pinned JSON file plus curated links. It omits the optional external tooltip widget. No server or network request is needed. This is a generated artifact; edit the shared source files and regenerate it. CI checks deterministic snapshot parity, exercises a single HTML response with all asset/external requests blocked, and uploads the HTML for review.
+Open `dist/sts2-bubble-preview.html` in a browser, or pass `-- --output /tmp/preview.html` to write elsewhere. The builder validates the snapshot, embeds the stylesheet, bundles the same app/model/geometry with the exact locked Pixi/d3 versions, and includes every pinned JSON file plus curated links. No server or network request is needed. This is a generated artifact; edit the shared source files and regenerate it. CI checks deterministic snapshot parity, exercises a single HTML response with all asset/external requests blocked, and uploads the HTML for review.
 
 ```sh
 npx playwright install chromium
@@ -74,6 +76,48 @@ This reads the pinned repository data and existing curated blocks, and writes en
 6. `npm run build:site` — regenerate `index.html` from the same shared model and current snapshot/curated links.
 7. Run `npm run check` and browser tests, then review the graph with provenance and relationship-family filters before deployment.
 
+The updater resolves one full upstream commit, downloads every file from that immutable commit, and validates the complete graph and current authored links before installing a staged directory. Failed downloads and validation never rewrite the existing snapshot. Installation retains the previous directory until the new snapshot is committed; a failed rename rolls back, and the next invocation recovers an interrupted updater after checking that its process has exited. The managed transaction is `data/.sts2-update/`, excluded from Git. Concurrent writers and recoveries are refused. The directory installation uses two renames, so do not run source-file readers or builds concurrently with a refresh. This protects against mixed snapshots and handles process interruptions; it is not a substitute for independent backups after hardware failure.
+
+An unchanged upstream commit keeps every snapshot byte, including its original date. To recover an interrupted transaction without contacting upstream:
+
+```sh
+node scripts/update-data.mjs --recover
+```
+
+If transaction ownership is incomplete, belongs to another host, or recovery itself was interrupted, the updater preserves the transaction and reports its path for inspection. Do not delete it blindly; it may contain the previous snapshot.
+
+## Backups and recovery
+
+Keep development commits on a GitHub branch and keep an independent copy outside GitHub and this workspace. Generated previews and expiring CI artifacts are useful exports, but authored Obsidian text needs its own preserved state.
+
+After committing code changes, create a recovery package:
+
+```sh
+npm run backup
+# Or choose a new output directory and include notes edited in another vault:
+npm run backup -- --output /tmp/sts2-recovery --vault /path/to/your/vault
+```
+
+The package contains `repository.bundle` with complete committed Git history, `authored-state.json` with current vault Markdown and `data/manual-links.json`, `manifest.json`, and `SHA256SUMS`. It captures uncommitted and untracked notes and preserves intentional Markdown deletions. Committed Obsidian defaults remain in Git history. Hidden vault settings, attachments, installed dependencies, credentials, and uncommitted code are outside the authored snapshot; preserve any needed attachments/settings separately. The command refuses shallow clones, pending snapshot transactions, uncommitted source changes, symlinked notes, and existing output directories.
+
+Copy the entire package outside this workspace. To restore with the repository's standalone tooling (Node and Git only):
+
+```sh
+npm run restore -- --input /path/to/sts2-recovery --output /path/to/new-checkout
+```
+
+If no checkout is available, first clone `repository.bundle` into a temporary tools directory, then run its `scripts/restore-backup.mjs` with the same arguments. Restoration checks every checksum and authored path before creating a fresh checkout, verifies Git object integrity, checks out the recorded commit, and restores the authored Markdown/export state. It refuses to overwrite existing directories. The restored checkout is detached so it cannot accidentally push changes to the original branch; create a new development branch and reconnect `origin` to `https://github.com/notkohrt/notkohrt.github.io.git` when appropriate.
+
+Inspect restored notes, install locked dependencies, regenerate the vault/site if authored changes were pending, and run validation before publishing. CI creates and restores a recovery package on every validation run and keeps the package artifact for 90 days; download periodic copies to independent storage.
+
+## Security maintenance
+
+`npm run check:security` enforces exact dependency versions matching the lockfile, source-script integrity, and full commit pins for workflow actions. `npm run check` includes this policy. CI also audits all locked dependencies, including development libraries bundled into the site, and fails on high/critical advisories. Dependabot proposes weekly npm and GitHub Actions updates; there is no automatic merge. When updating Pixi/d3, update the source template's exact URL and SHA-384 integrity from the installed locked distribution, regenerate the site, and run browser checks.
+
+The validation workflows have read-only repository permissions. Only the scheduled/manual data-refresh job can write its update branch and PR. Job timeouts and concurrency limits bound redundant work. Runtime data is escaped before entering HTML, and the production page executes bundled code without an unversioned third-party widget.
+
+Configure GitHub branch protection for `main` to require `validate`, `browser`, and `supply-chain`, require branches to be up to date, and prevent force pushes/deletion. These are repository settings and cannot be enforced by a workflow file alone. Verify the protections in GitHub; a checkout does not prove they are enabled. No DNS, paid service, database, or application secret is required for this static site.
+
 ## Relationship policy
 
 An edge should explain a mechanical interaction. A bare text mention is not enough. This applies to curated links as well: `references`, `related`, `synergizes`, `interacts with`, and bare `uses Stars`/`uses keyword` are not mechanical relationships. The validator and vault curator parser share this policy in `isMechanicalRelation`.
@@ -92,7 +136,7 @@ Relationship-family coloring follows the role before the object: “triggers on 
 
 ## Validation
 
-`npm run check` checks every JavaScript module, validates the emitted graph and snapshot metadata, verifies the committed `index.html` against a deterministic rebuild, and runs parser/pinned-dataset regressions plus a complete website/vault parity check. Vault tests preserve curated text, compare every generated note's outgoing edges with the website model, and verify deterministic regeneration and safe failure on invalid curated links.
+`npm run check` checks every JavaScript module and security policy, validates the emitted graph and snapshot metadata, verifies the committed `index.html` against a deterministic rebuild, and runs parser/pinned-dataset regressions plus a complete website/vault parity check. Vault tests preserve curated text, compare every generated note's outgoing edges with the website model, and verify deterministic regeneration and safe failure on invalid curated links. Refresh tests exercise failed downloads, schema rejection, rollback, interruption recovery, and writer conflicts. Recovery tests restore full history and authored changes, and reject corrupted packages and unsafe paths.
 
 The validator rejects duplicate IDs/paths, missing rule and manual endpoints, self edges, bare mentions, generic damage/play hubs, and unpinned metadata. It reports entity/character coverage and relationship-family counts. Some IDs in the upstream `card_powers.json` are absent from its entity lists; these are reported as `unresolved_card_power_mappings`, excluded from emitted edges, and kept separate from validation failures. Review these diagnostics during data updates instead of inventing replacement powers or altering the pinned input.
 

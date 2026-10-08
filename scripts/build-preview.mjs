@@ -5,10 +5,11 @@ import { build } from 'esbuild';
 import { loadSnapshot } from './load-snapshot.mjs';
 import { SOURCES, SOURCE_META_URL } from '../lib/graph-model.mjs';
 import { validateModel } from '../lib/validate-model.mjs';
+import { pinnedLibraries, validateSourceScripts } from '../lib/build-security.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-export async function renderPreview({ includeTooltip = false } = {}) {
+export async function renderPreview() {
   const snapshot = await loadSnapshot(root);
   const { errors, nodes, edges } = validateModel(snapshot);
   if (errors.length) throw new Error('Invalid preview snapshot:\n' + errors.join('\n'));
@@ -32,15 +33,7 @@ export async function renderPreview({ includeTooltip = false } = {}) {
   const stylesheet = /<link\s+rel="stylesheet"\s+href="\.\/styles\.css(?:\?[^"]*)?"\s*>/;
   if (!stylesheet.test(template)) throw new Error('Could not find the preview stylesheet');
   const scripts = /<script\b[^>]*\bsrc="([^"]+)"[^>]*>\s*<\/script>/g;
-  const scriptSources = [...template.matchAll(scripts)].map(match => match[1]);
-  const librarySources = ['pixi.js', 'd3'].map(name =>
-    'https://cdn.jsdelivr.net/npm/' + name + '@' + manifest.devDependencies[name] + '/dist/' + (name === 'pixi.js' ? 'pixi' : name) + '.min.js');
-  if (!librarySources.every(source => scriptSources.includes(source)) ||
-      !scriptSources.some(source => /^\.\/app\.js(?:\?|$)/.test(source)) ||
-      scriptSources.some(source => !librarySources.includes(source) &&
-        source !== 'https://spire-codex.com/widget/spire-codex-tooltip.js' && !/^\.\/app\.js(?:\?|$)/.test(source))) {
-    throw new Error('Preview dependencies differ from the website; update the preview entry');
-  }
+  validateSourceScripts(template, await pinnedLibraries(root, manifest));
 
   const embedded = Object.fromEntries(Object.entries(SOURCES).map(([key, file]) => [file, snapshot.raw[key]]));
   embedded[SOURCE_META_URL] = snapshot.meta;
@@ -53,13 +46,12 @@ export async function renderPreview({ includeTooltip = false } = {}) {
     .replace(stylesheet, () => '<style>' + css.replace(/<\/style/gi, '<\\/style') + '</style>')
     .replace(scripts, '')
     .replace('</body>', () => '<script id="sts2-snapshot" type="application/json">' + json + '</script>\n' +
-      '<script type="module">' + javascript + '</script>\n' +
-      (includeTooltip ? '<script src="https://spire-codex.com/widget/spire-codex-tooltip.js" async></script>\n' : '') + '</body>');
+      '<script type="module">' + javascript + '</script>\n</body>');
   return { html, nodes: nodes.length, edges: edges.length, bytes: Buffer.byteLength(html) };
 }
 
-export async function buildPreview(output = path.join(root, 'dist/sts2-bubble-preview.html'), options) {
-  const { html, ...stats } = await renderPreview(options);
+export async function buildPreview(output = path.join(root, 'dist/sts2-bubble-preview.html')) {
+  const { html, ...stats } = await renderPreview();
   const destination = path.resolve(output);
   await mkdir(path.dirname(destination), { recursive: true });
   await writeFile(destination, html);

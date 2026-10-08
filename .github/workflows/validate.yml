@@ -13,29 +13,47 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          node-version: 20
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
           cache: npm
       - name: Install locked test dependencies
         run: npm ci --ignore-scripts
       - name: Check generated index, syntax, emitted graph semantics, and website/vault parity
         run: npm run check
+      - name: Create and restore a full-history recovery package
+        run: |
+          npm run backup -- --output "$RUNNER_TEMP/sts2-recovery"
+          npm run restore -- --input "$RUNNER_TEMP/sts2-recovery" --output "$RUNNER_TEMP/sts2-restored"
+      - name: Upload verified recovery package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sts2-bubble-recovery
+          path: ${{ runner.temp }}/sts2-recovery/
+          retention-days: 90
+          if-no-files-found: error
       - name: Build standalone preview
         run: npm run build:preview
       - name: Upload standalone preview
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: sts2-bubble-preview
           path: dist/sts2-bubble-preview.html
           if-no-files-found: error
       - name: Upload the actual self-contained index.html
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: sts2-bubble-index
           path: index.html
@@ -50,7 +68,7 @@ jobs:
           test -f "vault/README.md"
           test "$(find vault -type f -name '*.md' | wc -l)" -gt 500
       - name: Upload Obsidian vault
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: sts2-bubble-obsidian-vault
           path: vault/
@@ -58,11 +76,12 @@ jobs:
 
   browser:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci --ignore-scripts
       - name: Install Chromium and system dependencies
@@ -71,8 +90,21 @@ jobs:
         run: npm run test:browser
       - name: Upload browser failure traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: browser-failure-traces
           path: test-results/
           if-no-files-found: ignore
+
+  supply-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Audit all locked dependencies, including bundled development libraries
+        run: npm audit --audit-level=high

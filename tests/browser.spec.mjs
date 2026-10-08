@@ -8,12 +8,12 @@ import { buildPreview, renderPreview } from '../scripts/build-preview.mjs';
 const test = base.extend({
   page: async ({ page }, use) => {
     // Exercise the production HTML and real pinned libraries without requiring
-    // external CDN availability or loading the optional third-party tooltip.
+    // external CDN availability. Source-mode libraries also enforce SRI.
     for (const [url, file] of [
       ['https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js', '../node_modules/pixi.js/dist/pixi.min.js'],
       ['https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js', '../node_modules/d3/dist/d3.min.js']
     ]) {
-      await page.route(url, route => route.fulfill({ path: fileURLToPath(new URL(file, import.meta.url)), contentType: 'text/javascript' }));
+      await page.route(url, route => route.fulfill({ path: fileURLToPath(new URL(file, import.meta.url)), contentType: 'text/javascript', headers: { 'access-control-allow-origin': '*' } }));
     }
     await page.route('https://spire-codex.com/**', route => route.abort());
     const errors = [];
@@ -76,7 +76,7 @@ test('source modules load styling and pinned data from a nested preview path', a
   await expect(page.locator('#entity-name')).toHaveText('Resonance');
 });
 
-async function exerciseSingleFile(page, result, optionalRequests = []) {
+async function exerciseSingleFile(page, result) {
   const blocked = [];
   const preview = 'http://127.0.0.1:8123/__standalone__/index.html';
   // The managed cloud browser blocks file: URLs. Serve only the generated
@@ -101,14 +101,14 @@ async function exerciseSingleFile(page, result, optionalRequests = []) {
   await page.reload();
   await expect(page.locator('#dataset-status')).toHaveClass(/ready/);
   await expect(page.locator('#entity-name')).toHaveText('Resonance');
-  expect(blocked.filter(url => !optionalRequests.includes(url))).toEqual([]);
+  expect(blocked).toEqual([]);
 }
 
 test('the actual index.html renders, traces connections, and reloads on mobile with all asset requests blocked', async ({ page }) => {
   const { nodes, edges } = await renderPreview();
   await exerciseSingleFile(page, {
     output: fileURLToPath(new URL('../index.html', import.meta.url)), nodes, edges
-  }, ['https://spire-codex.com/widget/spire-codex-tooltip.js']);
+  });
 });
 
 test('index.html remains interactive inside an opaque sandboxed preview iframe', async ({ page }) => {
@@ -192,6 +192,8 @@ test('character mechanics appear as actionable connections in the inspector', as
 });
 
 test('all backlinks remain reachable beyond the initial page', async ({ page }) => {
+  // Paging a large hub exercises repeated DOM and software-WebGL work.
+  test.setTimeout(60000);
   await ready(page, '/?node=mechanic:BLOCK');
   const total = Number(await page.locator('#backlinks-count').innerText());
   expect(total).toBeGreaterThan(50);

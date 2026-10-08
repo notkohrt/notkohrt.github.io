@@ -7,13 +7,11 @@ import { buildPreview, renderPreview } from '../scripts/build-preview.mjs';
 import { loadSnapshot } from '../scripts/load-snapshot.mjs';
 import { SOURCES, SOURCE_META_URL } from '../lib/graph-model.mjs';
 
-test('the actual index.html embeds the current source and pinned snapshot with only an asynchronous optional tooltip', async () => {
-  const { html } = await renderPreview({ includeTooltip: true });
+test('the actual index.html embeds the current source and pinned snapshot with no external scripts', async () => {
+  const { html } = await renderPreview();
   assert.equal(await readFile(new URL('../index.html', import.meta.url), 'utf8'), html);
   const scripts = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*>/g)];
-  assert.equal(scripts.length, 1);
-  assert.equal(scripts[0][1], 'https://spire-codex.com/widget/spire-codex-tooltip.js');
-  assert.match(scripts[0][0], /\basync\b/);
+  assert.equal(scripts.length, 0);
   assert.doesNotMatch(html, /<link\b[^>]*rel="stylesheet"/);
 });
 
