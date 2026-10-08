@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1e1e1e">
+
+  <title>STS2 Bubble — Slay the Spire 2 Interaction Graph</title>
+  <meta name="description" content="Explore cards, relics, powers, potions, enchantments, keywords, and their mechanical connections in Slay the Spire 2.">
+
+  <link rel="canonical" href="https://notkohrt.pro/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="STS2 Bubble">
+  <meta property="og:description" content="An interactive Slay the Spire 2 knowledge graph.">
+  <meta property="og:image" content="https://notkohrt.pro/docs/assets/sts2-neow.webp">
+  <meta property="og:url" content="https://notkohrt.pro/">
+  <meta property="og:site_name" content="STS2 Bubble">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="STS2 Bubble">
+  <meta name="twitter:description" content="An interactive Slay the Spire 2 knowledge graph.">
+  <meta name="twitter:image" content="https://notkohrt.pro/docs/assets/sts2-neow.webp">
+
+  <link rel="stylesheet" href="./styles.css?v=20261007-5">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">S2</div>
+        <div>
+          <div class="brand-title">STS2 Bubble</div>
+          <div class="brand-subtitle">vault graph</div>
+        </div>
+      </div>
+
+      <div class="view-controls" aria-label="Graph view controls">
+        <div class="segmented">
+          <button class="segment active" id="global-mode" type="button" aria-pressed="true">Global</button>
+          <button class="segment" id="local-mode" type="button" aria-pressed="false">Local</button>
+        </div>
+        <div class="depth-controls disabled" id="depth-controls" aria-label="Local graph depth">
+          <span>Depth</span>
+          <button class="depth-button active" data-depth="1" type="button" aria-pressed="true" disabled>1</button>
+          <button class="depth-button" data-depth="2" type="button" aria-pressed="false" disabled>2</button>
+          <button class="depth-button" data-depth="3" type="button" aria-pressed="false" disabled>3</button>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="ghost-button mobile-only" id="filters-toggle" type="button" aria-controls="filters-panel" aria-expanded="false">Controls</button>
+        <button class="command-button" id="command-button" type="button" aria-label="Find a note" aria-haspopup="dialog" aria-controls="command-palette">
+          <span>Quick switcher</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+        <div class="dataset-status" id="dataset-status" aria-live="polite">
+          <span class="status-dot"></span>
+          <span>Browser required</span>
+        </div>
+        <button class="ghost-button mobile-only" id="inspector-toggle" type="button" aria-controls="inspector-panel" aria-expanded="false">Note</button>
+      </div>
+    </header>
+
+    <aside class="panel filters-panel" id="filters-panel">
+      <div class="panel-header">
+        <div>
+          <h1>Graph controls</h1>
+          <p>Live force simulation. Drag any bubble and the graph restructures around it.</p>
+        </div>
+        <button class="icon-button mobile-only" id="filters-close" type="button" aria-label="Close controls">×</button>
+      </div>
+
+      <label class="search-wrap" for="search-input">
+        <span>Filter graph</span>
+        <input id="search-input" type="search" autocomplete="off" placeholder="Name, text, mechanic…">
+        <kbd>/</kbd>
+      </label>
+
+      <section class="filter-section physics-section">
+        <div class="filter-heading">Forces</div>
+
+        <label class="range-row" for="center-force">
+          <span>Center force</span>
+          <input id="center-force" type="range" min="0" max="100" value="12">
+        </label>
+
+        <label class="range-row" for="repel-force">
+          <span>Repel force</span>
+          <input id="repel-force" type="range" min="20" max="500" value="170">
+        </label>
+
+        <label class="range-row" for="link-force">
+          <span>Link force</span>
+          <input id="link-force" type="range" min="1" max="100" value="28">
+        </label>
+
+        <label class="range-row" for="link-distance">
+          <span>Link distance</span>
+          <input id="link-distance" type="range" min="25" max="220" value="92">
+        </label>
+
+        <label class="toggle-row physics-toggle">
+          <input id="pin-dragged" type="checkbox">
+          <span>Keep dragged bubbles pinned</span>
+        </label>
+
+        <button class="ghost-button full-button" id="reheat-graph" type="button">Restructure graph</button>
+      </section>
+
+      <section class="filter-section">
+        <div class="filter-heading">Entity type</div>
+        <div class="check-grid" id="type-filters"></div>
+      </section>
+
+      <section class="filter-section">
+        <label for="color-filter">Character / color</label>
+        <select id="color-filter"><option value="all">All colors</option></select>
+      </section>
+
+      <section class="filter-section">
+        <label for="rarity-filter">Rarity / tier</label>
+        <select id="rarity-filter"><option value="all">All rarities</option></select>
+      </section>
+
+      <section class="filter-section">
+        <label for="card-type-filter">Card type</label>
+        <select id="card-type-filter"><option value="all">All card types</option></select>
+      </section>
+
+      <section class="filter-section">
+        <label for="cost-filter">Card cost</label>
+        <select id="cost-filter"><option value="all">All costs</option></select>
+      </section>
+
+      <section class="filter-section">
+        <div class="filter-heading">Local graph direction</div>
+        <label class="toggle-row"><input id="incoming-filter" type="checkbox" checked><span>Incoming links</span></label>
+        <label class="toggle-row"><input id="outgoing-filter" type="checkbox" checked><span>Outgoing links</span></label>
+      </section>
+
+      <section class="filter-section">
+        <div class="filter-heading">Relationship source</div>
+        <div class="filter-scroll" id="provenance-filters"></div>
+      </section>
+
+      <section class="filter-section">
+        <div class="filter-heading">Relationship family</div>
+        <div class="filter-scroll" id="relation-filters"></div>
+      </section>
+
+      <section class="filter-section">
+        <label class="toggle-row"><input id="isolated-filter" type="checkbox" checked><span>Hide isolated nodes</span></label>
+      </section>
+
+      <div class="filter-actions">
+        <button class="primary-button" id="reset-filters" type="button">Reset</button>
+        <button class="ghost-button" id="clear-focus" type="button" disabled>Clear selection</button>
+      </div>
+      <button class="ghost-button full-button" id="copy-link" type="button" disabled>Copy selected-node link</button>
+
+      <div class="legend">
+        <div class="filter-heading">Node groups</div>
+        <div id="legend-items"></div>
+      </div>
+
+      <div class="source-note source-note-stack">
+        <div class="source-meta-row"><span>Data snapshot</span><span id="data-snapshot">loading…</span></div>
+        <a href="https://github.com/nkhoit/spire-archive" target="_blank" rel="noreferrer">Spire Archive source ↗</a>
+      </div>
+    </aside>
+
+    <main class="graph-stage" id="graph-stage">
+      <div id="graph-canvas" role="img" aria-label="Interactive Slay the Spire 2 relationship graph. Use Find a note to navigate with a keyboard."></div>
+      <div class="connection-caption hidden" id="connection-caption">
+        <span id="connection-caption-text" role="status"></span>
+        <button class="icon-button" id="clear-connection-caption" type="button" aria-label="Clear highlighted connection">×</button>
+      </div>
+
+      <div class="graph-toolbar">
+        <button class="icon-button" id="fit-graph" type="button" title="Fit graph" aria-label="Fit graph">◎</button>
+        <button class="icon-button" id="zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+        <button class="icon-button" id="zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+      </div>
+
+      <div class="graph-summary" id="graph-summary">Preparing graph…</div>
+      <div class="physics-badge" id="physics-badge">live physics</div>
+      <div class="selection-hint hidden" id="selection-hint">Select a bubble for its local graph.</div>
+
+      <div class="loading-state" id="loading-state" role="status" aria-live="polite" aria-busy="false">
+        <div class="loader hidden" id="loading-spinner" aria-hidden="true"></div>
+        <strong id="loading-title">Open the graph in a web browser</strong>
+        <span id="loading-message">The interactive graph needs JavaScript to run.</span>
+        <p id="startup-help">On iPhone or iPad, the Files preview may display this page without running the app. Use a hosted copy in Safari for the interactive graph. On a computer, open this file with Safari, Chrome, or Firefox.</p>
+      </div>
+    </main>
+
+    <aside class="panel inspector-panel" id="inspector-panel">
+      <div class="panel-header note-header">
+        <div>
+          <div class="note-path" id="note-path">No note selected</div>
+          <h2 id="note-panel-title">Reading view</h2>
+        </div>
+        <button class="icon-button mobile-only" id="inspector-close" type="button" aria-label="Close note">×</button>
+      </div>
+
+      <div class="inspector-empty" id="inspector-empty">
+        <div class="empty-orbit" aria-hidden="true"><span></span><span></span><span></span></div>
+        <strong>Open a note</strong>
+        <p>Click a bubble or use the quick switcher. Dragging a bubble physically restructures the graph.</p>
+      </div>
+
+      <article class="entity-card hidden" id="entity-card">
+        <div class="entity-kicker" id="entity-kicker"></div>
+        <h2 id="entity-name" tabindex="-1"></h2>
+        <div class="entity-meta" id="entity-meta"></div>
+        <div class="entity-description" id="entity-description"></div>
+
+        <div class="entity-facts hidden" id="entity-facts"></div>
+
+        <section class="relationship-detail hidden" id="relationship-detail" aria-label="Highlighted connection">
+          <div class="relations-header"><h3>Connection</h3><button class="ghost-button" id="clear-connection" type="button">Clear connection</button></div>
+          <p id="relationship-summary"></p>
+          <blockquote id="relationship-evidence"></blockquote>
+          <p class="relationship-origin" id="relationship-origin"></p>
+        </section>
+
+        <section class="upgrade-section hidden" id="upgrade-section">
+          <div class="relations-header"><h3>Upgrade</h3><span>+</span></div>
+          <div class="upgrade-card" id="upgrade-card"></div>
+        </section>
+
+        <section class="connection-tools" aria-label="Explore connections">
+          <label for="connection-search">Search connections</label>
+          <input id="connection-search" type="search" placeholder="Name, verb, or character…" aria-describedby="connection-search-help" aria-controls="outgoing-list backlinks-list" autocomplete="off">
+          <p id="connection-search-help">Search this note’s links. Graph filters stay as they are.</p>
+          <div class="connection-options">
+            <label for="connection-family">Mechanic family
+              <select id="connection-family" aria-controls="outgoing-list backlinks-list"><option value="all">All families</option></select>
+            </label>
+            <label for="connection-sort">Order by
+              <select id="connection-sort" aria-controls="outgoing-list backlinks-list">
+                <option value="name">Note name</option><option value="relation">Mechanical verb</option>
+              </select>
+            </label>
+          </div>
+          <div class="connection-results">
+            <p id="connection-results" role="status" aria-atomic="true"></p>
+            <button id="connection-reset" class="ghost-button" type="button" disabled>Clear search</button>
+          </div>
+        </section>
+
+        <section class="link-section" aria-labelledby="outgoing-heading">
+          <div class="relations-header"><h3 id="outgoing-heading">Outgoing links</h3><span id="outgoing-count"></span></div>
+          <div class="relations-list" id="outgoing-list"></div>
+        </section>
+
+        <section class="link-section" aria-labelledby="backlinks-heading">
+          <div class="relations-header"><h3 id="backlinks-heading">Backlinks</h3><span id="backlinks-count"></span></div>
+          <div class="relations-list" id="backlinks-list"></div>
+        </section>
+      </article>
+    </aside>
+
+    <footer class="footer">
+      <span class="project-credit">Slay the Spire 2 by <a href="https://www.megacrit.com/" target="_blank" rel="noreferrer">Mega Crit</a><span class="credit-context"> · Unofficial fan project</span></span>
+      <span id="data-count"></span>
+    </footer>
+  </div>
+
+  <div class="palette-backdrop hidden" id="palette-backdrop" role="presentation">
+    <div class="command-palette" id="command-palette" role="dialog" aria-modal="true" aria-label="Quick switcher">
+      <div class="palette-input-wrap">
+        <span>⌕</span>
+        <input id="palette-input" type="search" role="combobox" aria-label="Find a note" aria-autocomplete="list" aria-controls="palette-results" aria-expanded="false" autocomplete="off" placeholder="Open a card, relic, power…">
+        <button class="icon-button" id="palette-close" type="button" aria-label="Close quick switcher">×</button>
+      </div>
+      <div class="palette-results" id="palette-results" role="listbox" aria-label="Matching notes"></div>
+      <div class="palette-footer">Enter to open · ↑↓ to navigate</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js" integrity="sha384-9oZ4NtPN/IdabMfsgMnEAm+FTH+xpnGN/C33Kz3OdcRyh9aaO2N6PuIONCebF1jh" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous" defer></script>
+  <script src="./app.js?v=20261007-5" type="module"></script>
+</body>
+</html>

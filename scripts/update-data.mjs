@@ -1,45 +1,24 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { refreshSnapshot, recoverSnapshot } from '../lib/snapshot-update.mjs';
 
-const ROOT = path.resolve(new URL('..', import.meta.url).pathname);
-const OUT = path.join(ROOT, 'data', 'sts2');
-const REPO = 'nkhoit/spire-archive';
-const FILES = ['cards','relics','powers','potions','enchantments','keywords','mechanics','card_powers'];
+const root = fileURLToPath(new URL('../', import.meta.url));
 
-async function json(url) {
-  const response = await fetch(url, { headers: { 'User-Agent': 'sts2-bubble-data-updater' } });
-  if (!response.ok) throw new Error(url + ' -> ' + response.status);
-  return response.json();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const args = process.argv.slice(2);
+    if (args.length === 1 && args[0] === '--recover') {
+      console.log(await recoverSnapshot(root) ? 'Recovered interrupted snapshot update.' : 'No interrupted snapshot update.');
+    } else if (!args.length) {
+      const result = await refreshSnapshot({ root });
+      console.log(result.changed ? 'Installed validated snapshot: ' + result.sourceCommit : 'Snapshot already current: ' + result.sourceCommit);
+      console.log(result.nodes + ' notes, ' + result.edges + ' relationships.');
+      if (result.changed) console.log('Next: review the dataset, regenerate the vault and site, and run npm run check.');
+    } else {
+      throw new Error('Usage: node scripts/update-data.mjs [--recover]');
+    }
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
 }
-
-const ref = await json('https://api.github.com/repos/' + REPO + '/git/ref/heads/main');
-const sha = ref.object.sha;
-const rawBase = 'https://raw.githubusercontent.com/' + REPO + '/' + sha + '/data/sts2/';
-
-await mkdir(OUT, { recursive: true });
-
-for (const name of FILES) {
-  const response = await fetch(rawBase + name + '.json');
-  if (!response.ok) throw new Error(name + '.json -> ' + response.status);
-  const body = await response.text();
-  JSON.parse(body);
-  await writeFile(path.join(OUT, name + '.json'), body.endsWith('\n') ? body : body + '\n');
-  console.log('updated', name + '.json');
-}
-
-const changelog = await json(rawBase + 'changelog.json');
-const latest = changelog[0] || {};
-const today = new Date().toISOString().slice(0, 10);
-const meta = {
-  source_repository: REPO,
-  source_commit: sha,
-  snapshot_date: today,
-  game_data_version: latest.version || null,
-  game_data_date: latest.date || null,
-  source_path: 'data/sts2',
-  note: 'Pinned source snapshot used by STS2 Bubble.'
-};
-
-await writeFile(path.join(OUT, 'meta.json'), JSON.stringify(meta, null, 2) + '\n');
-console.log('snapshot', sha, latest.version || 'unknown', latest.date || 'unknown');
-console.log('Run: node scripts/validate-graph.mjs');

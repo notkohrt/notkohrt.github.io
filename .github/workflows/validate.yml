@@ -1,10 +1,12 @@
 name: Validate graph
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
       - feat/sts2-graph-clean
+      - codex/**
   pull_request:
     branches:
       - main
@@ -12,34 +14,110 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          node-version: 20
-      - name: Syntax check browser graph
-        run: node --check app.js
-      - name: Syntax check vault generator
-        run: node --check scripts/build-vault.mjs
-      - name: Syntax check data updater
-        run: node --check scripts/update-data.mjs
-      - name: Syntax check validator
-        run: node --check scripts/validate-graph.mjs
-      - name: Validate graph data and semantic endpoints
-        run: node scripts/validate-graph.mjs
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install locked test dependencies
+        run: npm ci --ignore-scripts
+      - name: Check generated index, syntax, emitted graph semantics, and website/vault parity
+        run: npm run check
+      - name: Build and verify the complete v1 website and vault package
+        run: |
+          npm run build:v1
+          npm run verify:v1 -- dist/sts2-bubble-v1
+      - name: Upload the complete v1 build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sts2-bubble-v1
+          path: dist/sts2-bubble-v1/
+          include-hidden-files: true
+          retention-days: 90
+          if-no-files-found: error
+      - name: Create and restore a full-history recovery package
+        run: |
+          npm run backup -- --output "$RUNNER_TEMP/sts2-recovery"
+          npm run restore -- --input "$RUNNER_TEMP/sts2-recovery" --output "$RUNNER_TEMP/sts2-restored"
+      - name: Upload verified recovery package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sts2-bubble-recovery
+          path: ${{ runner.temp }}/sts2-recovery/
+          retention-days: 90
+          if-no-files-found: error
+      - name: Build standalone preview
+        run: npm run build:preview
+      - name: Upload standalone preview
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sts2-bubble-preview
+          path: dist/sts2-bubble-preview.html
+          if-no-files-found: error
+      - name: Upload the actual self-contained index.html
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sts2-bubble-index
+          path: index.html
+          if-no-files-found: error
       - name: Build Obsidian vault
         run: node scripts/build-vault.mjs
+      - name: Check the embedded site matches the vault's curated export
+        run: node scripts/build-site.mjs --check
       - name: Verify generated vault
         run: |
           test -f "vault/Start Here.md"
           test -f "vault/README.md"
           test "$(find vault -type f -name '*.md' | wc -l)" -gt 500
       - name: Upload Obsidian vault
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sts2-bubble-obsidian-vault
           path: vault/
           if-no-files-found: error
+
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install Chromium, WebKit, and system dependencies
+        run: npx playwright install --with-deps chromium webkit
+      - name: Check previews, connections, inspector controls, and mobile/Safari startup
+        run: npm run test:browser
+      - name: Upload browser failure traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-failure-traces
+          path: test-results/
+          if-no-files-found: ignore
+
+  supply-chain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Audit all locked dependencies, including bundled development libraries
+        run: npm audit --audit-level=high

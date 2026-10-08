@@ -6,19 +6,30 @@ on:
     - cron: "17 9 * * 1"
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+
+concurrency:
+  group: sts2-data-refresh
+  cancel-in-progress: false
 
 jobs:
   refresh:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: main
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install locked test dependencies
+        run: npm ci --ignore-scripts
 
       - name: Refresh pinned Spire Archive snapshot
         run: node scripts/update-data.mjs
@@ -36,10 +47,9 @@ jobs:
       - name: Validate refreshed graph
         if: steps.diff.outputs.changed == 'true'
         run: |
-          node --check app.js
-          node --check scripts/build-vault.mjs
-          node scripts/validate-graph.mjs
-          node scripts/build-vault.mjs
+          npm run build:site
+          npm run check
+          node scripts/build-vault.mjs --output "$RUNNER_TEMP/sts2-vault"
 
       - name: Open data refresh pull request
         if: steps.diff.outputs.changed == 'true'
@@ -51,7 +61,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
-          git add data/sts2
+          git add data/sts2 index.html
           git commit -m "Refresh pinned STS2 data snapshot"
           git push origin "$BRANCH"
           gh pr create \
@@ -59,3 +69,7 @@ jobs:
             --head "$BRANCH" \
             --title "Refresh pinned STS2 data snapshot" \
             --body "Automated upstream snapshot refresh. Validation and vault generation passed. Review game-text changes for semantic-rule adjustments before merging."
+          # GITHUB_TOKEN events do not start push/pull_request workflows.
+          # workflow_dispatch is the supported exception; run the same required
+          # checks on this exact refresh branch without adding credentials.
+          gh workflow run validate.yml --ref "$BRANCH"

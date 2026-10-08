@@ -1,0 +1,25 @@
+{
+  "name": "sts2-bubble",
+  "version": "1.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check-syntax.mjs && node scripts/check-security.mjs && node scripts/validate-graph.mjs && node scripts/build-site.mjs --check && npm test",
+    "check:security": "node scripts/check-security.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "playwright test",
+    "build:vault": "node scripts/build-vault.mjs",
+    "build:preview": "node scripts/build-preview.mjs",
+    "build:site": "node scripts/build-site.mjs",
+    "build:v1": "node scripts/build-v1.mjs",
+    "verify:v1": "node scripts/build-v1.mjs --verify",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore-backup.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "d3": "7.9.0",
+    "esbuild": "0.28.2",
+    "pixi.js": "7.4.2"
+  }
+}

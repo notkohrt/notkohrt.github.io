@@ -1,0 +1,28 @@
+{
+  "name": "main",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": ["refs/heads/main"]
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          { "context": "validate", "integration_id": 15368 },
+          { "context": "browser", "integration_id": 15368 },
+          { "context": "supply-chain", "integration_id": 15368 }
+        ],
+        "strict_required_status_checks_policy": true
+      }
+    }
+  ]
+}
