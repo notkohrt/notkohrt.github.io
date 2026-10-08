@@ -7,6 +7,7 @@ import { SOURCES, SOURCE_META_URL } from '../lib/graph-model.mjs';
 import { validateModel } from '../lib/validate-model.mjs';
 import { pinnedLibraries, validateSourceScripts } from '../lib/build-security.mjs';
 import { PROJECT_SLUG } from '../lib/project.mjs';
+import { readSiteOrigin, renderSiteTemplate } from '../lib/site-origin.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -16,7 +17,8 @@ export async function renderPreview() {
   if (errors.length) throw new Error('Invalid preview snapshot:\n' + errors.join('\n'));
 
   const [template, css, result, manifest] = await Promise.all([
-    readFile(path.join(root, 'src/index.html'), 'utf8'),
+    Promise.all([readFile(path.join(root, 'src/index.html'), 'utf8'), readSiteOrigin(root)])
+      .then(([source, origin]) => renderSiteTemplate(source, origin)),
     readFile(path.join(root, 'styles.css'), 'utf8'),
     build({
       absWorkingDir: root,

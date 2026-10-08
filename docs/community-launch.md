@@ -1,10 +1,10 @@
 # STS2 Stars community launch
 
-Working draft for the v1.0.2 website and optional Obsidian vault, targeting **r/SlayTheSpire2**. Use **STS2 Stars** as the project name; `sts2stars.com` is the preferred domain candidate, subject to availability and registration.
+Working draft for the v1.0.2 website and optional Obsidian vault, targeting **r/SlayTheSpire2**. Use **STS2 Stars** as the project name. The user purchased **sts2stars.com**; the website link below is the final planned URL and still needs DNS/Pages deployment verification before posting.
 
 ## Launch order
 
-1. Choose the project domain, keeping `notkohrt.pro` for the developer site.
+1. Finish the `sts2stars.com` migration, keeping `notkohrt.pro` for the future developer site.
 2. Complete the r/SlayTheSpire2 post draft below, including its final website link.
 3. Build and verify the website/vault ZIP from the clean release commit, then publish it as a permanent public GitHub Release asset. Add that download link to the post.
 4. Verify the project domain, HTTPS, sharing preview, and mobile graph before posting.
@@ -13,19 +13,9 @@ Mega Crit attribution stays in the website and distribution. The pending artwork
 
 ## Project domain
 
-Selected naming direction: **STS2 Stars**, with **sts2stars** for domain naming, so the name in the app, post, and domain agrees.
+Selected and purchased: **sts2stars.com**, matching **STS2 Stars** in the app and post. Squarespace is the registrar and DNS provider. See [the domain migration plan](domain-plan.md) for the exact GitHub Pages records, ownership protection, and deployment checks.
 
-Candidates, with availability unverified:
-
-| Candidate | Reason |
-| --- | --- |
-| `sts2stars.com` | Matches the project name; first choice. |
-| `sts2stars.net` | Keeps the exact name with a familiar alternative suffix. |
-| `sts2stars.app` | Keeps the exact name and describes a browser app. |
-
-Registry access was blocked by this cloud's network proxy on 2026-10-08 while checking the previous naming candidate. Availability is unverified for every STS2 Stars candidate above; these are naming suggestions, not claims of availability or price. Confirm registration and renewal cost at a registrar before choosing.
-
-When a domain is chosen, update the Pages custom domain and DNS, repository `CNAME`, canonical/Open Graph/Twitter URLs in `src/index.html`, and the base URL in `playwright.production.config.mjs`. Regenerate `index.html`, update public documentation and post links, and run existing validation plus the live production checks. Preserve the current live site until the replacement is ready. Each GitHub Pages site has one configured custom domain; decide which Pages site will serve the developer domain if both sites will use GitHub Pages. This document makes no hosting or DNS changes.
+Canonical/Open Graph/Twitter URLs and production checks derive from repository `CNAME`. The migration branch prepares that file and regenerated `index.html`; publication waits for DNS configuration. The current graph stays on `notkohrt.pro` during preparation. A future developer site needs a separate hosting destination.
 
 ## Reddit post draft
 
@@ -37,7 +27,7 @@ I built STS2 Stars: a searchable map of Slay the Spire 2 mechanics
 
 I've been working on **STS2 Stars**, an interactive graph for exploring how cards, relics, powers, and other Slay the Spire 2 mechanics connect.
 
-**Try it:** [project website — add the final domain]
+**Try it:** https://sts2stars.com/
 
 Start with **Find** to search for a card or mechanic. Open its **Local** graph to explore nearby connections, then use **Show connection** in the note panel to highlight a specific relationship and its direction. You can also filter by character, entity type, and mechanic.
 
@@ -52,7 +42,7 @@ Slay the Spire 2 is by **Mega Crit**. This is an unofficial fan project; the dat
 ## Before posting
 
 - Confirm r/SlayTheSpire2's current rules and choose the appropriate flair. The rules API was blocked by this cloud's proxy on 2026-10-08, so no flair or self-promotion rule is assumed here.
-- Replace the website and release ZIP placeholders above after the draft is complete.
+- Verify the final website link and replace the release ZIP placeholder after the draft is complete.
 - Use the permanent project URL rather than the developer domain or an Actions artifact link.
 - Keep the public post's data version accurate if the pinned dataset changes before release.
 - Post only when explicitly instructed; this is a draft, not a scheduled announcement.
