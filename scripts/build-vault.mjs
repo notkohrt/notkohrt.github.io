@@ -102,6 +102,10 @@ function noteContent(node, detectedOutgoing, curated) {
     START,
     curatedBody,
     END,
+    '',
+    '---',
+    '',
+    'Slay the Spire 2 and its game content are by [Mega Crit](https://www.megacrit.com/). STS2 Bubble is an unofficial fan project.',
     ''
   ).join('\n');
 }

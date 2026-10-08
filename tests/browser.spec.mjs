@@ -43,6 +43,8 @@ test('renders the graph and restores a shared note URL', async ({ page }) => {
   await expect(page.locator('#entity-name')).toHaveText('Shiv');
   await expect(page).toHaveTitle('Shiv — STS2 Bubble');
   await expect(page.locator('#data-count')).toHaveText(/\d+ notes · \d+ links/);
+  await expect(page.locator('.project-credit a')).toBeVisible();
+  await expect(page.locator('.project-credit a')).toHaveAttribute('href', 'https://www.megacrit.com/');
   await page.reload();
   await expect(page.locator('#entity-name')).toHaveText('Shiv');
 });
@@ -94,6 +96,8 @@ async function exerciseSingleFile(page, result) {
   await expect(page.locator('#entity-name')).toHaveText('Shiv');
   await find(page, 'Resonance', 'card:RESONANCE');
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.project-credit a')).toBeVisible();
+  expect(await page.locator('.footer').evaluate(footer => footer.scrollWidth <= footer.clientWidth)).toBe(true);
   await page.locator('#inspector-toggle').click();
   await page.locator('.relation-trace[data-edge-id="card:RESONANCE|power:STRENGTH_POWER|grants"]').click();
   await expect(page.locator('#connection-caption')).toBeVisible();

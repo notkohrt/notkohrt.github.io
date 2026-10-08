@@ -28,6 +28,7 @@ test('vault output matches all website relationships, preserves curated text, an
       '- ' + edge.relation + ' [[' + paths.get(edge.target).replace(/\.md$/, '') + '|' + nodes.find(target => target.id === edge.target).name + ']]  <!-- ' + edge.provenance + ' -->');
     const section = content.get(node.id).split('## Detected relationships\n\n')[1].split('\n\n## Curated relationships')[0];
     assert.deepEqual(section.split('\n').filter(line => line.startsWith('- ')), expected, node.id);
+    assert.ok(content.get(node.id).includes('[Mega Crit](https://www.megacrit.com/)'), 'Missing game credit: ' + node.id);
   }
   const manual = JSON.parse(await readFile(path.join(output, 'data/manual-links.json'), 'utf8'));
   assert.ok(manual.some(link => link.source === 'card:SHIV' && link.target === 'power:STRENGTH_POWER' && link.relation === 'scales with'));

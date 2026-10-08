@@ -19,6 +19,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -68,3 +69,7 @@ jobs:
             --head "$BRANCH" \
             --title "Refresh pinned STS2 data snapshot" \
             --body "Automated upstream snapshot refresh. Validation and vault generation passed. Review game-text changes for semantic-rule adjustments before merging."
+          # GITHUB_TOKEN events do not start push/pull_request workflows.
+          # workflow_dispatch is the supported exception; run the same required
+          # checks on this exact refresh branch without adding credentials.
+          gh workflow run validate.yml --ref "$BRANCH"

@@ -223,7 +223,9 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
 .palette-result-meta{font-size:9px;color:#767676;text-transform:uppercase;letter-spacing:.05em}
 .palette-footer{border-top:1px solid var(--line);padding:6px 10px;color:#626262;font-size:9px}
 
-.footer{grid-area:foot;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 9px;background:#191919;color:#626262;font-size:9px}
+.footer{grid-area:foot;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 9px;background:#191919;color:#aaa;font-size:10px}
+.footer .project-credit,.footer #data-count{white-space:nowrap}
+.footer a{padding:5px 0}
 .mobile-only{display:none}
 
 @media(max-width:1120px){
@@ -241,7 +243,7 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
   .dataset-status{display:none}
   .depth-controls{display:none}
   .view-controls{justify-content:flex-start;padding-left:8px}
-  .footer span:first-child{display:none}
+  .footer .credit-context{display:none}
 }
 @media(max-width:560px){
   .brand-subtitle{display:none}.brand-title{display:none}.view-controls{gap:6px}.segment{padding:0 9px}
@@ -514,7 +516,7 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
     </aside>
 
     <footer class="footer">
-      <span>Unofficial fan project. Slay the Spire and related content belong to Mega Crit.</span>
+      <span class="project-credit">Slay the Spire 2 by <a href="https://www.megacrit.com/" target="_blank" rel="noreferrer">Mega Crit</a><span class="credit-context"> · Unofficial fan project</span></span>
       <span id="data-count"></span>
     </footer>
   </div>

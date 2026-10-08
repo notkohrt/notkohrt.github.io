@@ -2,6 +2,8 @@
 
 This is the authoring vault behind the public graph at notkohrt.pro.
 
+Slay the Spire 2 and its game content are by [Mega Crit](https://www.megacrit.com/). This is an unofficial fan project; see [[README#Credits|Credits]] for attribution and the artwork permission request.
+
 ## Workflow
 
 1. Run `node ../scripts/build-vault.mjs` from this folder, or `node scripts/build-vault.mjs` from the repository root.
