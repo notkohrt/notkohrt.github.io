@@ -11,6 +11,7 @@
     "build:vault": "node scripts/build-vault.mjs",
     "build:preview": "node scripts/build-preview.mjs",
     "build:site": "node scripts/build-site.mjs",
+    "plan:domain": "node scripts/plan-domain.mjs",
     "build:v1": "node scripts/build-v1.mjs",
     "verify:v1": "node scripts/build-v1.mjs --verify",
     "backup": "node scripts/backup.mjs",

@@ -1,6 +1,6 @@
 # STS2 Stars community launch
 
-Working draft for the v1.0.2 website and optional Obsidian vault, targeting **r/SlayTheSpire2**. Use **STS2 Stars** as the project name; `sts2stars.com` is the preferred domain candidate, subject to availability and registration.
+Working draft for the v1.0.2 website and optional Obsidian vault, targeting **r/SlayTheSpire2**. Use **STS2 Stars** as the project name. Compare verified registration and renewal prices for `sts2stars.io` and `sts2stars.com` before choosing; availability and registration remain pending.
 
 ## Launch order
 
@@ -19,13 +19,12 @@ Candidates, with availability unverified:
 
 | Candidate | Reason |
 | --- | --- |
-| `sts2stars.com` | Matches the project name; first choice. |
-| `sts2stars.net` | Keeps the exact name with a familiar alternative suffix. |
-| `sts2stars.app` | Keeps the exact name and describes a browser app. |
+| `sts2stars.io` | Tech/tool identity; compare the annual renewal cost before choosing. |
+| `sts2stars.com` | Familiar suffix; usually lower ongoing cost. |
 
-Registry access was blocked by this cloud's network proxy on 2026-10-08 while checking the previous naming candidate. Availability is unverified for every STS2 Stars candidate above; these are naming suggestions, not claims of availability or price. Confirm registration and renewal cost at a registrar before choosing.
+Registry and registrar access were blocked by this cloud's network proxy on 2026-10-08. Availability and current prices are unverified for both candidates. The user wants verified price comparisons before choosing. See [the domain plan](domain-plan.md) for sources, hosting, and migration steps.
 
-When a domain is chosen, update the Pages custom domain and DNS, repository `CNAME`, canonical/Open Graph/Twitter URLs in `src/index.html`, and the base URL in `playwright.production.config.mjs`. Regenerate `index.html`, update public documentation and post links, and run existing validation plus the live production checks. Preserve the current live site until the replacement is ready. Each GitHub Pages site has one configured custom domain; decide which Pages site will serve the developer domain if both sites will use GitHub Pages. This document makes no hosting or DNS changes.
+When an owned domain is chosen, update the Pages custom domain and DNS, edit repository `CNAME`, and regenerate `index.html`. Canonical/Open Graph/Twitter URLs and production checks derive from that one hostname. Update public documentation and post links, then run existing validation plus the live production checks. Preserve the current live site until the replacement is ready. Each GitHub Pages site has one configured custom domain; decide which Pages site will serve the developer domain if both sites will use GitHub Pages. This document makes no hosting or DNS changes.
 
 ## Reddit post draft
 
