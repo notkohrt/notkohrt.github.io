@@ -24,7 +24,25 @@ try {
       if (!/^[\w.-]+\/[\w./-]+@[a-f0-9]{40}$/.test(action)) throw new Error(file + ': action must be pinned to a full commit: ' + action);
     }
   }
-  console.log('Security policy checked: exact locked dependencies, source-script integrity, and immutable CI actions.');
+  // Renaming a CI job without updating the ruleset leaves main waiting for a
+  // check that can never arrive. Validate the portable policy against CI.
+  const ruleset = JSON.parse(await readFile(path.join(root, '.github/main-ruleset.json'), 'utf8'));
+  const workflow = await readFile(path.join(directory, 'validate.yml'), 'utf8');
+  const jobNames = new Set([...workflow.matchAll(/^  ([\w-]+):\s*$/gm)].map(match => match[1]));
+  const statusRule = ruleset.rules.find(rule => rule.type === 'required_status_checks');
+  if (ruleset.target !== 'branch' || ruleset.enforcement !== 'active' || ruleset.bypass_actors.length ||
+      ruleset.conditions.ref_name.exclude.length || ruleset.conditions.ref_name.include.length !== 1 ||
+      ruleset.conditions.ref_name.include[0] !== 'refs/heads/main' ||
+      !['deletion', 'non_fast_forward'].every(type => ruleset.rules.some(rule => rule.type === type)) ||
+      !statusRule?.parameters.strict_required_status_checks_policy || !statusRule.parameters.required_status_checks.length) {
+    throw new Error('Main ruleset must target only main, require up-to-date checks, and prevent bypass, deletion, and force pushes.');
+  }
+  for (const check of statusRule.parameters.required_status_checks) {
+    if (check.integration_id !== 15368 || !jobNames.has(check.context)) {
+      throw new Error('Main ruleset requires a missing GitHub Actions job: ' + check.context);
+    }
+  }
+  console.log('Security policy checked: exact locked dependencies, source-script integrity, immutable CI actions, and ruleset/check consistency.');
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;

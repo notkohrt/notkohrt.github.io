@@ -112,20 +112,22 @@ Inspect restored notes, install locked dependencies, regenerate the vault/site i
 
 ## Security maintenance
 
-`npm run check:security` enforces exact dependency versions matching the lockfile, source-script integrity, and full commit pins for workflow actions. `npm run check` includes this policy. CI also audits all locked dependencies, including development libraries bundled into the site, and fails on high/critical advisories. Dependabot proposes weekly npm and GitHub Actions updates; there is no automatic merge. When updating Pixi/d3, update the source template's exact URL and SHA-384 integrity from the installed locked distribution, regenerate the site, and run browser checks.
+`npm run check:security` enforces exact dependency versions matching the lockfile, source-script integrity, full commit pins for workflow actions, and agreement between the main ruleset's required checks and CI job names. `npm run check` includes this policy. CI uses Node 24-based Actions and the fixed `ubuntu-24.04` runner image. CI also audits all locked dependencies, including development libraries bundled into the site, and fails on high/critical advisories. Dependabot proposes weekly npm and GitHub Actions updates; there is no automatic merge. When updating Pixi/d3, update the source template's exact URL and SHA-384 integrity from the installed locked distribution, regenerate the site, and run browser checks.
 
 The validation workflows have read-only repository permissions. Only the scheduled/manual data-refresh job can write its update branch and PR, and dispatch its validation run. GitHub does not trigger push/pull-request workflows for events created by `GITHUB_TOKEN`; the refresh job explicitly dispatches `validate.yml` on its new branch so it receives all three required checks without another credential. Job timeouts and concurrency limits bound redundant work. Runtime data is escaped before entering HTML, and the production page executes bundled code without an unversioned third-party widget.
 
-The branch-protection policy in `.github/main-branch-protection.json` requires `validate`, `browser`, and `supply-chain` from the GitHub Actions app on `main`, requires branches to be up to date, and prevents force pushes/deletion. The checks also apply to administrators. The policy does not require another reviewer, so a sole maintainer can merge after CI passes. These are repository settings and cannot be enforced by a workflow file alone; committing this policy does not activate it. Configure it in GitHub Settings → Branches, or use a repository administrator's integration with administration-write permission:
+The active repository ruleset `main` (ID `24717644`, verified 2026-10-08) is captured in `.github/main-ruleset.json`. It targets **only** `refs/heads/main`, requires `validate`, `browser`, and `supply-chain` from the GitHub Actions app, requires up-to-date checks, and prevents force pushes/deletion. There are no bypass actors, including administrators. It does not require another reviewer, so a sole maintainer can merge after CI passes. Development branches must remain outside its scope so commits can reach GitHub before their checks run.
+
+Rulesets are repository settings; committing the JSON does not activate them. Inspect the actual ruleset and the effective rules on `main`:
 
 ```sh
-# Inspect the existing settings; preserve any stronger protections.
-gh api repos/notkohrt/notkohrt.github.io/branches/main/protection
-gh api --method PUT repos/notkohrt/notkohrt.github.io/branches/main/protection \
-  --input .github/main-branch-protection.json
+gh api repos/notkohrt/notkohrt.github.io/rulesets/24717644
+gh api repos/notkohrt/notkohrt.github.io/rules/branches/main
 ```
 
-An unprotected branch returns 404 on the inspection endpoint. Repository metadata reporting an account's admin role does not prove its integration can change protection settings; GitHub can reject the update with `Resource not accessible by integration`. Verify the saved settings through the same inspection endpoint after applying the policy and periodically thereafter. No DNS, paid service, database, or application secret is required for this static site.
+Edit the saved ruleset in GitHub Settings → Rules → Rulesets. An integration with administration-write permission can update it with `gh api --method PUT repos/notkohrt/notkohrt.github.io/rulesets/24717644 --input .github/main-ruleset.json`; inspect existing rules and preserve stronger protections before applying a replacement. Repository metadata reporting an account's admin role does not prove its integration can change settings; GitHub can reject the update with `Resource not accessible by integration`.
+
+`.github/main-branch-protection.json` remains an alternative classic-protection template for repositories that do not use rulesets. The classic protection endpoint does not report ruleset enforcement; an empty classic-protection page does not imply `main` is unprotected. Verify effective rules after settings changes and periodically thereafter. No DNS, paid service, database, or application secret is required for this static site.
 
 ## Relationship policy
 
@@ -133,9 +135,11 @@ An edge should explain a mechanical interaction. A bare text mention is not enou
 
 Prefer explicit and high-confidence relationships such as `creates`, `applies`, `grants`, `triggers on`, `scales with`, `requires`, `moves from/to`, `channels`, `evokes`, `forges`, or a similarly precise verb. Subjective deck-building synergy should not be represented as a factual mechanical edge.
 
-Parse each mention in its own clause. In “Whenever you apply Poison, gain Strength,” Poison is the trigger and Strength is the reward. Keep both roles when one target is mentioned twice, honor negated actions, and prefer a full entity name over overlapping shorter names. Exceptional character overrides replace inferred relationships for that source/target pair.
+Parse each mention in its own clause. In “Whenever you apply Poison, gain Strength,” Poison is the trigger and Strength is the reward. Keep both roles when one target is mentioned twice, honor negated actions, and prefer a full entity name over overlapping shorter names. A same-named metadata tag must not hide a unique card (Shiv); names shared by several cards or powers still need explicit disambiguation. Exceptional character overrides replace inferred relationships for that source/target pair.
 
 Effect parsing separates conditions from rewards at commas, periods, and semicolons; published line breaks can wrap a sentence. Match each effect in its own clause and retain each distinct role. “Whenever you draw an Ethereal card, draw 1 card” both triggers on draw and draws. “Whenever you apply Vulnerable, draw 1 card” only draws. Resource edges must also distinguish triggering on Block/HP loss, granting Block/Energy, preventing gain, and limiting loss. Inflected verbs share a vocabulary, and negation belongs to its own action rather than a later action in the sentence.
+
+Prohibitions and passive negation describe prevention, not positive actions: Runic Pyramid prevents discard, Retain prevents end-of-turn discard, and Eternal prevents transformation. An explicit “or” action list shares negation; a separate reward does not. Card-play caps are restrictions rather than plain play edges. Adding a modifier to an existing card or moving cards from another pile is not card creation; adding a copy is creation. “Whenever you add a card to your Deck” is an addition trigger rather than a creation reward. Cost filters (“a card that costs 2 or more”, “cards that do not cost 0”) do not modify costs; actual assignments, reductions, randomization, and extra costs do.
 
 Relationship-family coloring follows the role before the object: “triggers on card creation” is a trigger and “requires Doom application” is a requirement. Regression tests cover these distinctions.
 
