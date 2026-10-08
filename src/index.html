@@ -56,7 +56,7 @@
         </button>
         <div class="dataset-status" id="dataset-status" aria-live="polite">
           <span class="status-dot"></span>
-          <span>Loading…</span>
+          <span>Browser required</span>
         </div>
         <button class="ghost-button mobile-only" id="inspector-toggle" type="button" aria-controls="inspector-panel" aria-expanded="false">Note</button>
       </div>
@@ -187,10 +187,11 @@
       <div class="physics-badge" id="physics-badge">live physics</div>
       <div class="selection-hint hidden" id="selection-hint">Select a bubble for its local graph.</div>
 
-      <div class="loading-state" id="loading-state">
-        <div class="loader"></div>
-        <strong>Building the vault graph</strong>
-        <span>Loading STS2 entities and starting the force simulation.</span>
+      <div class="loading-state" id="loading-state" role="status" aria-live="polite" aria-busy="false">
+        <div class="loader hidden" id="loading-spinner" aria-hidden="true"></div>
+        <strong id="loading-title">Open the graph in a web browser</strong>
+        <span id="loading-message">The interactive graph needs JavaScript to run.</span>
+        <p id="startup-help">On iPhone or iPad, the Files preview may display this page without running the app. Use a hosted copy in Safari for the interactive graph. On a computer, open this file with Safari, Chrome, or Firefox.</p>
       </div>
     </main>
 

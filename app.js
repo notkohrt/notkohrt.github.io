@@ -1623,6 +1623,13 @@ import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
   }
 
   async function boot() {
+    let phase = 'data';
+    $('loading-state').setAttribute('aria-busy', 'true');
+    $('loading-title').textContent = 'Building the vault graph';
+    $('loading-message').textContent = 'Reading the pinned STS2 entities and relationships.';
+    $('dataset-status').innerHTML = '<span class="status-dot"></span><span>Loading pinned data…</span>';
+    $('loading-spinner').classList.remove('hidden');
+    $('startup-help').classList.add('hidden');
     try {
       const [entries, datasetMeta] = await Promise.all([
         Promise.all(Object.entries(SOURCES).map(async pair => [pair[0], await loadJson(pair[1])])),
@@ -1638,6 +1645,8 @@ import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
       state.edges = buildEdges(state.nodes, manualLinks, raw.cardPowers);
       buildAdjacency();
 
+      phase = 'graph';
+      $('loading-message').textContent = 'Starting the graph renderer.';
       initPixi();
       setupControls();
       applyFilters(false);
@@ -1651,6 +1660,7 @@ import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
 
       scheduleFit(() => initialNode ? fitNeighborhood(initialNode) : fitGraph(), 500);
 
+      $('loading-state').setAttribute('aria-busy', 'false');
       $('loading-state').classList.add('hidden');
       $('dataset-status').classList.add('ready');
       const version = state.datasetMeta.game_data_version ? 'v' + state.datasetMeta.game_data_version : 'snapshot';
@@ -1663,10 +1673,15 @@ import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
       }
     } catch (err) {
       console.error(err);
-      $('loading-state').innerHTML = '<strong>Could not load STS2 data</strong><span>' + htmlEsc(err.message) + '</span>';
-      $('dataset-status').innerHTML = '<span class="status-dot"></span><span>Data unavailable</span>';
+      $('loading-state').setAttribute('aria-busy', 'false');
+      $('loading-spinner').classList.add('hidden');
+      $('loading-title').textContent = phase === 'data' ? 'Could not load STS2 data' : 'Graph could not start';
+      $('loading-message').textContent = err.message;
+      $('startup-help').classList.remove('hidden');
+      $('dataset-status').innerHTML = '<span class="status-dot"></span><span>' + (phase === 'data' ? 'Data unavailable' : 'Graph unavailable') + '</span>';
     }
   }
 
-  window.addEventListener('DOMContentLoaded', boot);
+  if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', boot, { once: true });
+  else boot();
 })();

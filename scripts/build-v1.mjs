@@ -78,6 +78,7 @@ function openingInstructions(manifest) {
 Extract the downloaded ZIP before opening its files.
 
 - Open \`index.html\` in a browser to use the graph. The interface, libraries, and pinned data are embedded in that file.
+- On iPhone or iPad, use a hosted copy in Safari. The Files HTML preview may display the page without executing JavaScript; it cannot be relied on for the interactive graph. The static opening message is browser guidance, and the spinner appears only after the app actually starts.
 - Open the \`vault\` folder as an Obsidian vault, then read **Start Here**. The website and all entity notes contain the same ${manifest.graph.entities} entities and ${manifest.graph.relationships} relationships.
 - Read \`CREDITS.md\` for Mega Crit attribution and the pending artwork permission request. Online artwork availability is separate from the embedded interface and data.
 

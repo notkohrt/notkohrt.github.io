@@ -51,6 +51,8 @@ npm run build:preview
 
 Open `dist/sts2-bubble-preview.html` in a browser, or pass `-- --output /tmp/preview.html` to write elsewhere. The builder validates the snapshot, embeds the stylesheet, bundles the same app/model/geometry with the exact locked Pixi/d3 versions, and includes every pinned JSON file plus curated links. No server or network request is needed. This is a generated artifact; edit the shared source files and regenerate it. CI checks deterministic snapshot parity, exercises a single HTML response with all asset/external requests blocked, and uploads the HTML for review.
 
+Self-contained HTML still needs a browser that runs JavaScript and supports WebGL. iPhone/iPad Files Quick Look can render the static page while leaving scripts unexecuted. Use a hosted copy in Safari on those devices. The initial HTML shows browser-opening guidance with no spinner; `boot` switches to loading only when JavaScript runs. Data and renderer failures stop the spinner and retain actionable guidance. Initialization also handles a module executing after `DOMContentLoaded`, so delayed script evaluation cannot leave a working browser waiting forever.
+
 For a complete v1 build containing that website and the generated Obsidian vault:
 
 ```sh
@@ -70,10 +72,11 @@ Download **sts2-bubble-v1** from a successful validation run's Artifacts section
 
 ```sh
 npx playwright install chromium
+npx playwright install webkit
 npm run test:browser
 ```
 
-If Chromium is already installed, `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium npm run test:browser` uses it. The tests start their own local server on port 8123 and cover graph rendering, shareable URLs, filtered-note navigation, inspector pagination, keyboard focus, and mobile drawers.
+If Chromium is already installed, `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium npm run test:browser -- --project=chromium` uses it. The tests start their own local server on port 8123 and cover graph rendering, shareable URLs, filtered-note navigation, inspector pagination, keyboard focus, and mobile drawers. The `webkit` project runs focused startup checks with Safari's engine: an actual local HTML file, mobile note search and tracing, JavaScript-disabled previews, late module evaluation, and renderer failure. This tests engine compatibility; it does not reproduce iOS Files Quick Look. CI installs both browsers and requires both projects in the existing `browser` job. If local WebKit download is blocked by cloud egress, run the available Chromium checks locally and verify WebKit in CI; environment-settings publication is not a development prerequisite.
 
 Generate a vault without rewriting checkout files:
 
