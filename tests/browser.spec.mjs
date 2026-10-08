@@ -42,7 +42,7 @@ async function find(page, query, id) {
 test('renders the graph and restores a shared note URL', async ({ page }) => {
   await ready(page, '/?node=card:SHIV');
   await expect(page.locator('#entity-name')).toHaveText('Shiv');
-  await expect(page).toHaveTitle('Shiv — STS2 Bubble');
+  await expect(page).toHaveTitle('Shiv — STS2 Stars');
   await expect(page.locator('#data-count')).toHaveText(/\d+ notes · \d+ links/);
   await expect(page.locator('.project-credit a')).toBeVisible();
   await expect(page.locator('.project-credit a')).toHaveAttribute('href', 'https://www.megacrit.com/');

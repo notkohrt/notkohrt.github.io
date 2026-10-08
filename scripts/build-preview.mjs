@@ -6,6 +6,7 @@ import { loadSnapshot } from './load-snapshot.mjs';
 import { SOURCES, SOURCE_META_URL } from '../lib/graph-model.mjs';
 import { validateModel } from '../lib/validate-model.mjs';
 import { pinnedLibraries, validateSourceScripts } from '../lib/build-security.mjs';
+import { PROJECT_SLUG } from '../lib/project.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -50,7 +51,7 @@ export async function renderPreview() {
   return { html, nodes: nodes.length, edges: edges.length, bytes: Buffer.byteLength(html) };
 }
 
-export async function buildPreview(output = path.join(root, 'dist/sts2-bubble-preview.html')) {
+export async function buildPreview(output = path.join(root, 'dist', PROJECT_SLUG + '-preview.html')) {
   const { html, ...stats } = await renderPreview();
   const destination = path.resolve(output);
   await mkdir(path.dirname(destination), { recursive: true });

@@ -1,6 +1,6 @@
 # Credits
 
-[Mega Crit](https://www.megacrit.com/) created Slay the Spire 2. Its game content, including artwork, belongs to Mega Crit. STS2 Bubble is an unofficial fan project.
+[Mega Crit](https://www.megacrit.com/) created Slay the Spire 2. Its game content, including artwork, belongs to Mega Crit. STS2 Stars is an unofficial fan project.
 
 The pinned game-data snapshot comes from [Spire Archive](https://github.com/nkhoit/spire-archive). Its exact source commit is recorded in `data/sts2/meta.json` and displayed on the website.
 

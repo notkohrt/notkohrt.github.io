@@ -2,6 +2,7 @@ import { SOURCES, SOURCE_META_URL, RELATION_FAMILIES, normalizeData, buildEdges,
 import { assignEdgeLanes, edgeGeometry, uniqueLayoutLinks } from './lib/graph-geometry.mjs';
 import { loadJson } from './lib/browser-data.mjs';
 import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
+import { PROJECT_NAME, PROJECT_TITLE } from './lib/project.mjs';
 
 (() => {
   const RELATION_FAMILY_LABELS = Object.fromEntries(Object.entries(RELATION_FAMILIES).map(([id, family]) => [id, family.label]));
@@ -1196,7 +1197,7 @@ import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
       setNodeInUrl(null, true);
       $('clear-focus').disabled = true;
       $('copy-link').disabled = true;
-      document.title = 'STS2 Bubble — Slay the Spire 2 Interaction Graph';
+      document.title = PROJECT_TITLE;
       $('entity-card').classList.add('hidden');
       $('inspector-empty').classList.remove('hidden');
       $('note-path').textContent = 'No note selected';
@@ -1236,7 +1237,7 @@ import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
     state.tracedEdgeId = null;
     state.focusedId = id;
     if (writeUrl) setNodeInUrl(id, false);
-    document.title = node.name + ' — STS2 Bubble';
+    document.title = node.name + ' — ' + PROJECT_NAME;
     $('clear-focus').disabled = false;
     $('copy-link').disabled = false;
     renderInspector(id);
@@ -1299,7 +1300,7 @@ import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
     state.tracedEdgeId = null;
     syncRelationshipTrace();
     if (writeUrl) setNodeInUrl(null, false);
-    document.title = 'STS2 Bubble — Slay the Spire 2 Interaction Graph';
+    document.title = PROJECT_TITLE;
     $('clear-focus').disabled = true;
     $('copy-link').disabled = true;
     setPanelOpen('inspector', false);
