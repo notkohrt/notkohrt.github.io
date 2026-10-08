@@ -2,6 +2,11 @@ name: Validate graph
 
 on:
   workflow_dispatch:
+    inputs:
+      verify_production:
+        description: Check the live site against this ref (must already be deployed)
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -121,3 +126,26 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Audit all locked dependencies, including bundled development libraries
         run: npm audit --audit-level=high
+
+  production:
+    if: github.ref == 'refs/heads/main' || inputs.verify_production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install Chromium, WebKit, and system dependencies
+        run: npx playwright install --with-deps chromium webkit
+      - name: Verify deployed HTML, pinned counts, and mobile interaction on the live site
+        run: npx playwright test --config playwright.production.config.mjs
+      - name: Upload live-site failure traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: production-failure-traces
+          path: test-results/
+          if-no-files-found: ignore
