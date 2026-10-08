@@ -203,6 +203,107 @@ test('all backlinks remain reachable beyond the initial page', async ({ page }) 
   await expect(page.locator('#backlinks-list .relation-row:last-child .relation')).toBeFocused();
 });
 
+test('connection search reaches unpaged backlinks, announces totals, and resets when navigating to a note', async ({ page }) => {
+  // Several interactions with the real graph can exceed 30s on software WebGL.
+  test.setTimeout(60000);
+  await ready(page, '/?node=mechanic:BLOCK');
+  const graphSummary = await page.locator('#graph-summary').innerText();
+  const total = Number(await page.locator('#backlinks-count').innerText());
+  const search = page.getByRole('searchbox', { name: 'Search connections' });
+  await expect(page.locator('#backlinks-list button[data-target="relic:VITRUVIAN_MINION"]')).toHaveCount(0);
+  await search.fill('vitruvian regent modifies');
+  await expect(search).toBeFocused();
+  await expect(page.locator('#backlinks-count')).toHaveText('1 / ' + total);
+  await expect(page.locator('#connection-results')).toHaveText('1 of ' + total + ' connections');
+  await expect(page.locator('#backlinks-list .relation')).toHaveCount(1);
+  await expect(page.locator('#backlinks-list .relations-more')).toHaveCount(0);
+  await expect(page.locator('#graph-summary')).toHaveText(graphSummary);
+  expect(new URL(page.url()).searchParams.get('node')).toBe('mechanic:BLOCK');
+  await search.fill('no-such-connection');
+  await expect(page.locator('#backlinks-list .empty-links')).toContainText('match this search');
+  await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+  await expect(search).toBeFocused();
+  await expect(page.locator('#backlinks-count')).toHaveText(String(total));
+  await expect(page.locator('#backlinks-list .relation')).toHaveCount(50);
+  await search.fill('vitruvian');
+  const note = page.locator('#backlinks-list button[data-target="relic:VITRUVIAN_MINION"]');
+  await note.focus();
+  await note.press('Enter');
+  await expect(page.locator('#entity-name')).toHaveText('Vitruvian Minion');
+  await expect(page.locator('#entity-name')).toBeFocused();
+  await expect(search).toHaveValue('');
+  await expect(page.locator('#connection-family')).toHaveValue('all');
+});
+
+test('inspector family filters preserve traces, follow graph eligibility, and keep keyboard focus', async ({ page }) => {
+  test.setTimeout(60000);
+  await ready(page, '/?node=card:RESONANCE');
+  const search = page.getByRole('searchbox', { name: 'Search connections' });
+  const family = page.getByRole('combobox', { name: 'Mechanic family' });
+  const grants = 'card:RESONANCE|power:STRENGTH_POWER|grants';
+  await page.locator('.relation-trace[data-edge-id="' + grants + '"]').click();
+  await search.fill('strength');
+  await family.focus();
+  await family.selectOption('modification');
+  await expect(family).toBeFocused();
+  await expect(page.locator('#outgoing-list .relation')).toHaveCount(1);
+  await expect(page.locator('#outgoing-list .relation')).toContainText('reduces');
+  await expect(page.locator('#outgoing-count')).toHaveText('1 / 2');
+  await expect(page.locator('#relationship-summary')).toHaveText('Resonance → grants → Strength');
+  await page.locator('[data-relation-family="modification"]').uncheck();
+  await expect(family).toHaveValue('modification');
+  await expect(family.locator('option:checked')).toHaveText('Modify / retain (0)');
+  await expect(page.locator('#outgoing-count')).toHaveText('0 / 1');
+  await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+  await expect(search).toBeFocused();
+  await expect(page.locator('.relation-trace[data-edge-id="' + grants + '"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('combobox', { name: 'Order by' }).selectOption('relation');
+  await page.getByRole('button', { name: 'Reset', exact: true }).click();
+  await expect(page.locator('#outgoing-list .relation-type')).toHaveText([/grants/, /reduces/]);
+});
+
+test('mobile connection search and tracing preserve the selected note and search', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await ready(page, '/?node=mechanic:BLOCK');
+  const search = page.getByRole('searchbox', { name: 'Search connections' });
+  await search.fill('afterimage silent grants');
+  await expect(search).toHaveCSS('font-size', '16px');
+  await expect(page.locator('#backlinks-list .relation')).toHaveCount(1);
+  await page.locator('.relation-trace[data-edge-id="card:AFTERIMAGE|mechanic:BLOCK|grants"]').click();
+  await expect(page.locator('#inspector-panel')).toHaveJSProperty('inert', true);
+  await expect(page.locator('#inspector-toggle')).toBeFocused();
+  await expect(page.locator('#connection-caption-text')).toHaveText('Afterimage → grants → Block');
+  await page.locator('#inspector-toggle').click();
+  await expect(search).toHaveValue('afterimage silent grants');
+  await expect(page.locator('#entity-name')).toHaveText('Block');
+  await expect(page.locator('.relation-trace[aria-pressed="true"]')).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('editing inspector connections pauses graph work and leaving the controls resumes it', async ({ page }) => {
+  await ready(page, '/?node=mechanic:BLOCK');
+  await page.locator('#reheat-graph').click();
+  const search = page.getByRole('searchbox', { name: 'Search connections' });
+  await search.fill('silent grants');
+  await expect(page.locator('#physics-badge')).toHaveText('layout paused');
+  const countDraws = () => page.evaluate(async () => {
+    const original = PIXI.Graphics.prototype.clear;
+    let count = 0;
+    PIXI.Graphics.prototype.clear = function (...args) { count += 1; return original.apply(this, args); };
+    try {
+      // Let any render already requested before the focus change finish.
+      await new Promise(requestAnimationFrame);
+      count = 0;
+      for (let frame = 0; frame < 5; frame += 1) await new Promise(requestAnimationFrame);
+      return count;
+    } finally { PIXI.Graphics.prototype.clear = original; }
+  });
+  expect(await countDraws()).toBe(0);
+  await page.locator('#copy-link').focus();
+  await expect(page.locator('#physics-badge')).toHaveText('live physics');
+  expect(await countDraws()).toBeGreaterThan(0);
+});
+
 test('parallel relationship traces keep the selected note and distinguish each role', async ({ page }) => {
   await ready(page, '/?node=card:RESONANCE');
   const grantsId = 'card:RESONANCE|power:STRENGTH_POWER|grants';

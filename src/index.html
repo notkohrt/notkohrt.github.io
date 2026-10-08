@@ -229,13 +229,33 @@
           <div class="upgrade-card" id="upgrade-card"></div>
         </section>
 
-        <section class="link-section">
-          <div class="relations-header"><h3>Outgoing links</h3><span id="outgoing-count"></span></div>
+        <section class="connection-tools" aria-label="Explore connections">
+          <label for="connection-search">Search connections</label>
+          <input id="connection-search" type="search" placeholder="Name, verb, or character…" aria-describedby="connection-search-help" aria-controls="outgoing-list backlinks-list" autocomplete="off">
+          <p id="connection-search-help">Search this note’s links. Graph filters stay as they are.</p>
+          <div class="connection-options">
+            <label for="connection-family">Mechanic family
+              <select id="connection-family" aria-controls="outgoing-list backlinks-list"><option value="all">All families</option></select>
+            </label>
+            <label for="connection-sort">Order by
+              <select id="connection-sort" aria-controls="outgoing-list backlinks-list">
+                <option value="name">Note name</option><option value="relation">Mechanical verb</option>
+              </select>
+            </label>
+          </div>
+          <div class="connection-results">
+            <p id="connection-results" role="status" aria-atomic="true"></p>
+            <button id="connection-reset" class="ghost-button" type="button" disabled>Clear search</button>
+          </div>
+        </section>
+
+        <section class="link-section" aria-labelledby="outgoing-heading">
+          <div class="relations-header"><h3 id="outgoing-heading">Outgoing links</h3><span id="outgoing-count"></span></div>
           <div class="relations-list" id="outgoing-list"></div>
         </section>
 
-        <section class="link-section">
-          <div class="relations-header"><h3>Backlinks</h3><span id="backlinks-count"></span></div>
+        <section class="link-section" aria-labelledby="backlinks-heading">
+          <div class="relations-header"><h3 id="backlinks-heading">Backlinks</h3><span id="backlinks-count"></span></div>
           <div class="relations-list" id="backlinks-list"></div>
         </section>
       </article>

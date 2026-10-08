@@ -1,6 +1,7 @@
 import { SOURCES, SOURCE_META_URL, RELATION_FAMILIES, normalizeData, buildEdges, relationFamily, createNodePaths } from './lib/graph-model.mjs';
 import { assignEdgeLanes, edgeGeometry, uniqueLayoutLinks } from './lib/graph-geometry.mjs';
 import { loadJson } from './lib/browser-data.mjs';
+import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
 
 (() => {
   const RELATION_FAMILY_LABELS = Object.fromEntries(Object.entries(RELATION_FAMILIES).map(([id, family]) => [id, family.label]));
@@ -70,6 +71,7 @@ import { loadJson } from './lib/browser-data.mjs';
     visibleEdges: [],
     simEdges: [],
     simulation: null,
+    animationPaused: false,
 
     focusedId: null,
     tracedEdgeId: null,
@@ -86,6 +88,7 @@ import { loadJson } from './lib/browser-data.mjs';
     paletteReturnFocus: null,
     inspectorId: null,
     inspectorLimits: { outgoing: 50, incoming: 50 },
+    inspectorRelations: { outgoing: [], incoming: [] },
 
     draggingNode: null,
     panning: false,
@@ -215,12 +218,23 @@ import { loadJson } from './lib/browser-data.mjs';
   }
 
   function syncAnimation() {
-    const paused = document.hidden || !$('palette-backdrop').classList.contains('hidden');
+    const paused = document.hidden || !$('palette-backdrop').classList.contains('hidden') ||
+      Boolean(document.activeElement?.closest('.connection-tools'));
+    state.animationPaused = paused;
     if (paused) state.simulation?.stop();
     else {
       if (state.simulation?.alpha() >= state.simulation?.alphaMin()) state.simulation.restart();
       requestRender();
     }
+    updatePhysicsBadge();
+  }
+
+  function updatePhysicsBadge() {
+    if (!state.simulation) return;
+    const active = !state.animationPaused &&
+      (state.simulation.alpha() >= state.simulation.alphaMin() || Boolean(state.draggingNode));
+    $('physics-badge').classList.toggle('active', active);
+    $('physics-badge').textContent = state.animationPaused ? 'layout paused' : active ? 'live physics' : 'layout settled';
   }
 
   function makeOverlayLabel() {
@@ -410,7 +424,7 @@ import { loadJson } from './lib/browser-data.mjs';
       .on('end', requestRender)
       .restart();
 
-    $('physics-badge').classList.add('active');
+    syncAnimation();
   }
 
   function updatePhysics() {
@@ -429,7 +443,7 @@ import { loadJson } from './lib/browser-data.mjs';
     link.distance(state.settings.distance).strength(state.settings.link);
 
     state.simulation.alpha(0.72).restart();
-    $('physics-badge').classList.add('active');
+    syncAnimation();
   }
 
   function restructureGraph() {
@@ -448,7 +462,7 @@ import { loadJson } from './lib/browser-data.mjs';
     }
 
     if (state.simulation) state.simulation.alpha(1).restart();
-    $('physics-badge').classList.add('active');
+    syncAnimation();
   }
 
   function renderFrame() {
@@ -489,11 +503,7 @@ import { loadJson } from './lib/browser-data.mjs';
       state.focusLabel.visible = false;
     }
 
-    if (state.simulation) {
-      const active = state.simulation.alpha() >= state.simulation.alphaMin() || Boolean(state.draggingNode);
-      $('physics-badge').classList.toggle('active', active);
-      $('physics-badge').textContent = active ? 'live physics' : 'layout settled';
-    }
+    updatePhysicsBadge();
   }
 
   function drawEdges() {
@@ -960,6 +970,22 @@ import { loadJson } from './lib/browser-data.mjs';
     $('palette-input').addEventListener('keydown', handlePaletteKeys);
     $('clear-connection').addEventListener('click', () => traceRelationship(null));
     $('clear-connection-caption').addEventListener('click', () => traceRelationship(null));
+    const connectionTools = document.querySelector('.connection-tools');
+    connectionTools.addEventListener('focusin', syncAnimation);
+    connectionTools.addEventListener('focusout', () => queueMicrotask(syncAnimation));
+    for (const id of ['connection-search', 'connection-family', 'connection-sort']) {
+      $(id).addEventListener(id === 'connection-search' ? 'input' : 'change', () => {
+        state.inspectorLimits = { outgoing: 50, incoming: 50 };
+        renderInspectorRelations();
+      });
+    }
+    $('connection-reset').addEventListener('click', () => {
+      $('connection-search').value = '';
+      $('connection-family').value = 'all';
+      state.inspectorLimits = { outgoing: 50, incoming: 50 };
+      renderInspectorRelations();
+      $('connection-search').focus({ preventScroll: true });
+    });
     for (const direction of ['outgoing', 'incoming']) {
       const list = $(direction === 'outgoing' ? 'outgoing-list' : 'backlinks-list');
       list.addEventListener('click', e => {
@@ -972,7 +998,7 @@ import { loadJson } from './lib/browser-data.mjs';
           traceRelationship(state.tracedEdgeId === id ? null : id);
         } else if (e.target.closest('.relations-more')) {
           state.inspectorLimits[direction] += 50;
-          renderInspector(state.focusedId);
+          renderInspectorRelations();
           const more = list.querySelector('.relations-more');
           (more || list.querySelector('.relation-row:last-child .relation'))?.focus({ preventScroll: true });
         }
@@ -1164,6 +1190,7 @@ import { loadJson } from './lib/browser-data.mjs';
 
     if (state.focusedId && !visible.has(state.focusedId)) {
       state.focusedId = null;
+      state.inspectorId = null;
       setNodeInUrl(null, true);
       $('clear-focus').disabled = true;
       $('copy-link').disabled = true;
@@ -1266,6 +1293,7 @@ import { loadJson } from './lib/browser-data.mjs';
 
   function clearFocus(writeUrl = true) {
     state.focusedId = null;
+    state.inspectorId = null;
     state.tracedEdgeId = null;
     syncRelationshipTrace();
     if (writeUrl) setNodeInUrl(null, false);
@@ -1308,6 +1336,12 @@ import { loadJson } from './lib/browser-data.mjs';
     if (state.inspectorId !== id) {
       state.inspectorId = id;
       state.inspectorLimits = { outgoing: 50, incoming: 50 };
+      state.inspectorRelations = {
+        outgoing: indexRelations(state.outAdj.get(id) || [], state.byId, 'outgoing'),
+        incoming: indexRelations(state.inAdj.get(id) || [], state.byId, 'incoming')
+      };
+      $('connection-search').value = '';
+      $('connection-family').value = 'all';
       $('inspector-panel').scrollTop = 0;
     }
 
@@ -1373,25 +1407,41 @@ import { loadJson } from './lib/browser-data.mjs';
       $('upgrade-card').innerHTML = '';
     }
 
-    const outgoing = (state.outAdj.get(id) || [])
-      .filter(edgePassesFilters)
-      .map(edge => ({ edge, node: state.byId.get(edge.target) }))
-      .filter(item => item.node);
+    renderInspectorRelations();
+  }
 
-    const incoming = (state.inAdj.get(id) || [])
-      .filter(edgePassesFilters)
-      .map(edge => ({ edge, node: state.byId.get(edge.source) }))
-      .filter(item => item.node);
+  function renderInspectorRelations() {
+    if (!state.focusedId) return;
+    const options = {
+      query: $('connection-search').value,
+      family: $('connection-family').value,
+      sort: $('connection-sort').value
+    };
+    const outgoing = selectRelations(state.inspectorRelations.outgoing.filter(item => edgePassesFilters(item.edge)), options);
+    const incoming = selectRelations(state.inspectorRelations.incoming.filter(item => edgePassesFilters(item.edge)), options);
+    const searching = Boolean(options.query.trim() || options.family !== 'all');
+    for (const [id, result] of [['outgoing-count', outgoing], ['backlinks-count', incoming]]) {
+      $(id).textContent = searching ? result.items.length + ' / ' + result.total : result.total;
+      $(id).setAttribute('aria-label', result.items.length + ' matching connections of ' + result.total);
+    }
+    const total = outgoing.total + incoming.total;
+    const matching = outgoing.items.length + incoming.items.length;
+    $('connection-results').textContent = (searching ? matching + ' of ' : '') + total + ' connections';
+    $('connection-reset').disabled = !searching;
+    $('connection-family').innerHTML = '<option value="all">All families (' + total + ')</option>' +
+      Object.entries(RELATION_FAMILIES).flatMap(([id, family]) => {
+        const count = (outgoing.familyCounts.get(id) || 0) + (incoming.familyCounts.get(id) || 0);
+        return count || id === options.family ? ['<option value="' + id + '">' + htmlEsc(family.label) + ' (' + count + ')</option>'] : [];
+      }).join('');
+    $('connection-family').value = options.family;
 
-    $('outgoing-count').textContent = outgoing.length;
-    $('backlinks-count').textContent = incoming.length;
-
-    const renderRelations = (items, direction, label) => {
+    const renderRelations = (result, direction, label) => {
       const limit = state.inspectorLimits[direction];
-      const sorted = items.sort((a, b) => a.node.name.localeCompare(b.node.name) || a.edge.relation.localeCompare(b.edge.relation));
-      if (!sorted.length) return '<div class="empty-links">No ' + label + ' matching relationship filters.</div>';
-      const rows = sorted.slice(0, limit).map(item => relationRow(item.edge, item.node, direction === 'outgoing' ? 'to' : 'from')).join('');
-      return rows + (sorted.length > limit ? '<button type="button" class="ghost-button relations-more">Show more ' + label + ' (' + (sorted.length - limit) + ' remaining)</button>' : '');
+      const items = result.items;
+      if (!items.length) return '<div class="empty-links">No ' + label +
+        (searching ? ' match this search and mechanic family.' : ' matching graph relationship filters.') + '</div>';
+      const rows = items.slice(0, limit).map(item => relationRow(item.edge, item.node, direction === 'outgoing' ? 'to' : 'from')).join('');
+      return rows + (items.length > limit ? '<button type="button" class="ghost-button relations-more">Show more ' + label + ' (' + (items.length - limit) + ' remaining)</button>' : '');
     };
     $('outgoing-list').innerHTML = renderRelations(outgoing, 'outgoing', 'outgoing links');
     $('backlinks-list').innerHTML = renderRelations(incoming, 'incoming', 'backlinks');

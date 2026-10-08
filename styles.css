@@ -150,10 +150,20 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
 .entity-meta{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:13px}
 .chip{border:1px solid #3b3b3b;background:#252525;border-radius:999px;padding:2px 7px;font-size:9.5px;color:#a7a7a7}
 .entity-description{white-space:pre-line;color:#cfcfcf;padding:0 0 17px;border-bottom:1px solid var(--line-soft);font-size:11.5px;line-height:1.65}
+.connection-tools{margin-top:16px;padding:12px 0 8px;border-bottom:1px solid var(--line-soft)}
+.connection-tools label{display:block;font-size:10px;color:#b5b5b5}
+.connection-tools input,.connection-tools select{display:block;width:100%;min-width:0;min-height:36px;margin-top:5px;padding:6px 8px;border:1px solid #444;border-radius:5px;background:#191919;color:var(--text);font-size:11px}
+.connection-tools input::placeholder{color:#909090}
+.connection-tools p{margin:6px 0;color:#aaa;font-size:10px}
+.connection-options{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:8px;margin-top:10px}
+.connection-results{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:5px}
+.connection-results p{min-width:0}
+.connection-results button{flex-shrink:0;min-height:36px;font-size:10px;padding:0 6px}
+.connection-results button:disabled{opacity:.45;cursor:default}
 .link-section{padding-top:3px}
 .relations-header{display:flex;align-items:center;justify-content:space-between;margin:14px 0 5px}
 .relations-header h3{font-size:10px;text-transform:uppercase;letter-spacing:.075em;margin:0;color:#939393}
-.relations-header span{font-size:9.5px;color:#696969}
+.relations-header span{font-size:9.5px;color:#aaa}
 .relation{display:grid;grid-template-columns:7px minmax(0,1fr);gap:8px;padding:7px 5px;border:0;background:transparent;width:100%;text-align:left;border-radius:5px;cursor:pointer}
 .relation-name,.relation-type{display:block}
 .relation-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;border-radius:5px}
@@ -170,10 +180,10 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
 .relation:hover{background:#292929}
 .relation-dot{width:6px;height:6px;border-radius:50%;margin-top:5px}
 .relation-name{font-size:11px;color:#c9c9c9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.relation-type{font-size:9px;color:#727272;margin-top:1px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.relation-type{font-size:10px;color:#aaa;margin-top:1px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .relation-family-dot{width:6px;height:6px;border-radius:50%;display:inline-block;flex:0 0 auto}
-.relation-provenance{color:#7267b8}
-.empty-links{font-size:10px;color:#696969;padding:7px 2px}
+.relation-provenance{color:#b0a1e4}
+.empty-links{font-size:11px;color:#aaa;padding:7px 2px}
 
 .palette-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.52);display:grid;place-items:start center;padding-top:11vh;z-index:100}
 .command-palette{width:min(620px,calc(100vw - 28px));background:#202020;border:1px solid #454545;border-radius:9px;box-shadow:var(--shadow);overflow:hidden}
@@ -220,6 +230,9 @@ select{width:100%;height:31px;border:1px solid var(--line);border-radius:6px;bac
 @media(max-width:900px){
   .relation,.ghost-button.mobile-only,.icon-button{min-height:40px}
   .icon-button{min-width:40px}
+  .connection-tools input,.connection-tools select{min-height:44px;font-size:16px}
+  .connection-options{grid-template-columns:minmax(0,1fr)}
+  .connection-results button{min-height:44px}
 }
 @media(prefers-reduced-motion:reduce){
   .filters-panel,.inspector-panel{transition:none}
