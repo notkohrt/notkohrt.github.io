@@ -113,7 +113,24 @@ for (const [effect, text, expected] of [
   ['COST_CHANGE', 'Cards cost an additional [E] this turn.', ['modifies cost']],
   ['COST_CHANGE', 'The next card costs 2 [E].', ['modifies cost']],
   ['COST_CHANGE', 'Choose a card that costs 0 and increase its cost by 1 [E].', ['modifies cost']],
-  ['COST_CHANGE', 'When you draw this card, randomize its cost from 0 to 3.', ['modifies cost']]
+  ['COST_CHANGE', 'When you draw this card, randomize its cost from 0 to 3.', ['modifies cost']],
+  ['UPGRADE', 'Add 3 Upgraded Shivs into your Hand.', []],
+  ['UPGRADE', 'Add an Upgraded copy of a card into your Hand.', []],
+  ['UPGRADE', 'Upgraded Attacks deal 3 additional damage.', ['requires upgraded cards']],
+  ['UPGRADE', 'Gain 1 Block for each Upgraded card in your Hand.', ['scales with upgraded cards']],
+  ['UPGRADE', 'A picture of an Upgraded card.', []],
+  ['UPGRADE', 'If you Upgraded a card this combat, gain 2 Block.', ['requires upgrade']],
+  ['UPGRADE', 'Whenever you are Upgrading cards, gain 2 Block.', ['triggers on upgrade']],
+  ['UPGRADE', 'Add an Upgraded card into your Hand and Upgrade another card.', ['upgrades']],
+  ['UPGRADE', 'The first Hand you draw each combat is Upgraded.', ['upgrades']],
+  ['UPGRADE', 'After each combat, add a card back Upgraded.', ['upgrades']],
+  ['SHUFFLE', 'Whenever you are Shuffling your Draw Pile, gain 2 Block.', ['triggers on shuffle']],
+  ['EVOKE', 'Whenever you are Evoking an Orb, gain 2 Block.', ['triggers on evoke']],
+  ['DRAW', 'Cards in the Draw Pile can no longer be drawn.', ['modifies draw']],
+  ['DISCARD', 'Cards in the Discard Pile cannot be discarded.', ['prevents discard']],
+  ['EXHAUST_CARD', 'Cards in the Exhaust Pile cannot be Exhausted.', ['prevents exhaust']],
+  ['TRANSFORM', 'Transforms into a powerful Relic after defeating 5 Elites.', []],
+  ['TRANSFORM', 'Transform a card into a random Attack.', ['transforms']]
 ]) {
   test('effect clause semantics: ' + effect + ' [' + text + ']', () => assert.deepEqual(inferEffectRelations(effect, text), expected));
 }
@@ -258,7 +275,15 @@ for (const [source, target, expected] of [
   ['power:BORROWED_TIME_POWER', 'effect:COST_CHANGE', ['modifies cost']],
   ['relic:BOOKMARK', 'effect:COST_CHANGE', ['modifies cost']],
   ['potion:SNECKO_OIL', 'effect:COST_CHANGE', ['modifies cost']],
-  ['enchantment:SLUMBERING_ESSENCE', 'effect:COST_CHANGE', ['modifies cost']]
+  ['enchantment:SLUMBERING_ESSENCE', 'effect:COST_CHANGE', ['modifies cost']],
+  ['relic:MINIATURE_CANNON', 'effect:UPGRADE', ['requires upgraded cards']],
+  ['relic:MINIATURE_CANNON', 'effect:DAMAGE', ['modifies damage']],
+  ['potion:COSMIC_CONCOCTION', 'effect:UPGRADE', []],
+  ['potion:CUNNING_POTION', 'effect:UPGRADE', []],
+  ['potion:CUNNING_POTION', 'card:SHIV', ['creates']],
+  ['relic:SWORD_OF_STONE', 'effect:TRANSFORM', []],
+  ['relic:PAELS_TOOTH', 'effect:UPGRADE', ['upgrades']],
+  ['relic:BELLOWS', 'effect:UPGRADE', ['upgrades']]
 ]) {
   test('pinned regression: ' + source + ' → ' + target, () => assert.deepEqual(relations(source, target), expected));
 }

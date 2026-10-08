@@ -203,10 +203,15 @@ test('all backlinks remain reachable beyond the initial page', async ({ page }) 
   expect(total).toBeGreaterThan(50);
   await expect(page.locator('#backlinks-list .relation')).toHaveCount(50);
   while (await page.locator('#backlinks-list .relations-more').count()) {
+    const visible = await page.locator('#backlinks-list .relation').count();
     await page.locator('#backlinks-list .relations-more').click();
+    const next = page.locator('#backlinks-list .relation').nth(visible);
+    await expect(next).toBeFocused();
+    // Tab continues through the new page's connection controls.
+    await next.press('Tab');
+    await expect(page.locator('#backlinks-list .relation-row').nth(visible).locator('.relation-trace')).toBeFocused();
   }
   await expect(page.locator('#backlinks-list .relation')).toHaveCount(total);
-  await expect(page.locator('#backlinks-list .relation-row:last-child .relation')).toBeFocused();
 });
 
 test('connection search reaches unpaged backlinks, announces totals, and resets when navigating to a note', async ({ page }) => {
@@ -223,10 +228,12 @@ test('connection search reaches unpaged backlinks, announces totals, and resets 
   await expect(page.locator('#connection-results')).toHaveText('1 of ' + total + ' connections');
   await expect(page.locator('#backlinks-list .relation')).toHaveCount(1);
   await expect(page.locator('#backlinks-list .relations-more')).toHaveCount(0);
+  await expect(page.locator('#connection-family option')).toHaveText(['All families (1)', 'Modify / retain (1)']);
   await expect(page.locator('#graph-summary')).toHaveText(graphSummary);
   expect(new URL(page.url()).searchParams.get('node')).toBe('mechanic:BLOCK');
   await search.fill('no-such-connection');
   await expect(page.locator('#backlinks-list .empty-links')).toContainText('match this search');
+  await expect(page.locator('#connection-family option')).toHaveText(['All families (0)']);
   await page.getByRole('button', { name: 'Clear search', exact: true }).click();
   await expect(search).toBeFocused();
   await expect(page.locator('#backlinks-count')).toHaveText(String(total));
@@ -275,6 +282,7 @@ test('mobile connection search and tracing preserve the selected note and search
   await search.fill('afterimage silent grants');
   await expect(search).toHaveCSS('font-size', '16px');
   await expect(page.locator('#backlinks-list .relation')).toHaveCount(1);
+  await expect(page.locator('#connection-family option')).toHaveText(['All families (1)', 'Apply / grant (1)']);
   await page.locator('.relation-trace[data-edge-id="card:AFTERIMAGE|mechanic:BLOCK|grants"]').click();
   await expect(page.locator('#inspector-panel')).toHaveJSProperty('inert', true);
   await expect(page.locator('#inspector-toggle')).toBeFocused();

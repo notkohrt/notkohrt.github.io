@@ -58,6 +58,25 @@ test('parallel roles can be selected independently without changing the index or
   assert.deepEqual(index, before);
 });
 
+test('family counts follow search matches and stay independent of the selected family', () => {
+  const index = indexRelations(edges.filter(edge => edge.source === 'card:RESONANCE'), byId, 'outgoing');
+  const all = selectRelations(index, { query: 'strength' });
+  const modified = selectRelations(index, { query: 'strength', family: 'modification' });
+  assert.equal(all.queryTotal, 2);
+  assert.equal(modified.queryTotal, 2);
+  assert.equal(modified.items.length, 1);
+  assert.deepEqual(modified.familyCounts, all.familyCounts);
+  assert.equal(all.familyCounts.get('application'), 1);
+  assert.equal(all.familyCounts.get('modification'), 1);
+  const grant = selectRelations(index, { query: 'strength grants' });
+  assert.equal(grant.queryTotal, 1);
+  assert.deepEqual([...grant.familyCounts], [['application', 1]]);
+  const empty = selectRelations(index, { query: 'unknown mechanic' });
+  assert.equal(empty.queryTotal, 0);
+  assert.equal(empty.familyCounts.size, 0);
+  assert.equal(empty.total, index.length);
+});
+
 test('Unicode names and duplicate names are searchable and sort deterministically', () => {
   const targets = new Map([
     ['power:a', { id: 'power:a', name: 'Élan', type: 'power' }],

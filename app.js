@@ -997,10 +997,12 @@ import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
           const id = e.target.closest('.relation-trace').dataset.edgeId;
           traceRelationship(state.tracedEdgeId === id ? null : id);
         } else if (e.target.closest('.relations-more')) {
+          const previousLimit = state.inspectorLimits[direction];
           state.inspectorLimits[direction] += 50;
           renderInspectorRelations();
-          const more = list.querySelector('.relations-more');
-          (more || list.querySelector('.relation-row:last-child .relation'))?.focus({ preventScroll: true });
+          // Continue reading from the first newly revealed link. Focusing
+          // the replacement More button would skip the entire new page.
+          list.querySelectorAll('.relation')[previousLimit]?.focus({ preventScroll: true });
         }
       });
     }
@@ -1428,7 +1430,7 @@ import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
     const matching = outgoing.items.length + incoming.items.length;
     $('connection-results').textContent = (searching ? matching + ' of ' : '') + total + ' connections';
     $('connection-reset').disabled = !searching;
-    $('connection-family').innerHTML = '<option value="all">All families (' + total + ')</option>' +
+    $('connection-family').innerHTML = '<option value="all">All families (' + (outgoing.queryTotal + incoming.queryTotal) + ')</option>' +
       Object.entries(RELATION_FAMILIES).flatMap(([id, family]) => {
         const count = (outgoing.familyCounts.get(id) || 0) + (incoming.familyCounts.get(id) || 0);
         return count || id === options.family ? ['<option value="' + id + '">' + htmlEsc(family.label) + ' (' + count + ')</option>'] : [];
