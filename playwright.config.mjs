@@ -16,7 +16,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      testIgnore: '**/webkit-file.spec.mjs',
+      testIgnore: ['**/webkit-file.spec.mjs', '**/production.spec.mjs'],
       use: {
         browserName: 'chromium',
         launchOptions: {
