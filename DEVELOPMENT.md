@@ -51,6 +51,23 @@ npm run build:preview
 
 Open `dist/sts2-bubble-preview.html` in a browser, or pass `-- --output /tmp/preview.html` to write elsewhere. The builder validates the snapshot, embeds the stylesheet, bundles the same app/model/geometry with the exact locked Pixi/d3 versions, and includes every pinned JSON file plus curated links. No server or network request is needed. This is a generated artifact; edit the shared source files and regenerate it. CI checks deterministic snapshot parity, exercises a single HTML response with all asset/external requests blocked, and uploads the HTML for review.
 
+For a complete v1 build containing that website and the generated Obsidian vault:
+
+```sh
+npm run build:v1
+# Choose a fresh directory when the default output already exists:
+npm run build:v1 -- --output /tmp/sts2-v1-review
+npm run verify:v1 -- /tmp/sts2-v1-review
+```
+
+The builder uses the same website renderer and vault generator without rewriting the checkout. It rejects stale root HTML, pending snapshot transactions, and unexported curated relationships. It copies the pinned JSON files, attribution, vault reading instructions, and only the two repository-owned Obsidian defaults (`app.json` and `graph.json`). It adds no plugin, artwork download, private vault settings, or attachment. The output directory must be new; a failed build removes only the directory it created.
+
+`manifest.json` records v1's package version, full source commit, local-change status, exact Node/dependency versions, lockfile SHA-256, snapshot metadata, and entity/relationship counts. No wall-clock timestamp enters the build, so unchanged inputs produce identical files and checksums. Local builds with source edits are clearly marked as development builds; reproducible distributions use a clean commit. CI packages before its in-checkout vault generation so the source status stays clean. `SHA256SUMS` covers every other packaged file, including the manifest. These hashes detect corruption or edits; they do not authenticate the publisher.
+
+Verification rejects missing, extra, duplicate, unsafe, symlinked, or changed files; compares the embedded website snapshot to the packaged data; and checks every entity note and curated export against the shared model. Use the verifier from the recorded source commit when checking an older build whose semantic parsers may differ. Browser tests exercise the packaged `index.html` with all linked assets and external requests blocked, including mobile navigation and connection tracing.
+
+Download **sts2-bubble-v1** from a successful validation run's Artifacts section, sign in to GitHub if prompted, and extract the ZIP before opening `index.html` or the `vault` folder. Actions retains this artifact for 90 days. A workspace file link is not a registered ChatGPT download artifact and can produce “could not download artifact”; use the GitHub artifact link and keep an independent copy. The complete build is an export; the separate recovery artifact preserves source history and authored state for restoration.
+
 ```sh
 npx playwright install chromium
 npm run test:browser

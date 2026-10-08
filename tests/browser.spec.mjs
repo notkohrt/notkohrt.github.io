@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { buildPreview, renderPreview } from '../scripts/build-preview.mjs';
+import { buildV1 } from '../scripts/build-v1.mjs';
 
 const test = base.extend({
   page: async ({ page }, use) => {
@@ -137,6 +138,16 @@ test('standalone preview supports desktop and mobile navigation without linked a
   try {
     const result = await buildPreview(path.join(directory, 'preview.html'));
     await exerciseSingleFile(page, result);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('the packaged v1 website supports desktop and mobile reading with all asset requests blocked', async ({ page }) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'sts2-v1-browser-'));
+  try {
+    const result = await buildV1(path.join(directory, 'build'));
+    await exerciseSingleFile(page, { ...result, output: path.join(result.output, 'index.html') });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -6,6 +6,8 @@ The generated entity notes are created by:
 
 `node scripts/build-vault.mjs`
 
+Run that command in a full repository checkout. A downloaded build already contains the generated notes; extract the ZIP and open this folder directly. Keep edited notes before replacing an export. Regeneration and website updates require the full checkout described in its `DEVELOPMENT.md`.
+
 ## Structure
 
 - `Cards/`

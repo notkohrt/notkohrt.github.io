@@ -7,6 +7,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 try {
   const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
+  if (!/^1\.\d+\.\d+$/.test(manifest.version || '') || lock.version !== manifest.version || lock.packages[''].version !== manifest.version) {
+    throw new Error('Package version must match the locked v1 build version.');
+  }
   for (const [name, version] of Object.entries(manifest.devDependencies)) {
     if (!/^\d+\.\d+\.\d+$/.test(version) || lock.packages[''].devDependencies[name] !== version || lock.packages['node_modules/' + name]?.version !== version) {
       throw new Error('Development dependency must match its exact locked version: ' + name);

@@ -6,10 +6,6 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const { values } = parseArgs({ options: { output: { type: 'string' } } });
-const OUTPUT = values.output ? path.resolve(values.output) : ROOT;
-const VAULT = path.join(OUTPUT, 'vault');
-const MANUAL_LINKS_PATH = path.join(OUTPUT, 'data', 'manual-links.json');
 
 const START = '<!-- CURATED START -->';
 const END = '<!-- CURATED END -->';
@@ -24,7 +20,7 @@ async function load(source) {
   return JSON.parse(await readFile(file, 'utf8'));
 }
 
-function extractCurated(content) {
+export function extractCurated(content) {
   const start = content.indexOf(START);
   const end = content.indexOf(END);
   if (start === -1 || end === -1 || end < start) return '';
@@ -36,7 +32,7 @@ async function readExistingCurated(file) {
   return extractCurated(await readFile(file, 'utf8'));
 }
 
-function parseCuratedLinks(sourceNode, curated, pathToId) {
+export function parseCuratedLinks(sourceNode, curated, pathToId) {
   const links = [];
   const lines = curated.split(/\r?\n/);
 
@@ -64,7 +60,7 @@ function wikiLink(node, nodePath) {
   return '[[' + nodePath.replace(/\.md$/i, '') + '|' + node.name + ']]';
 }
 
-function noteContent(node, detectedOutgoing, curated) {
+export function noteContent(node, detectedOutgoing, curated) {
   const metadata = [
     '---',
     'id: ' + yaml(node.id),
@@ -110,7 +106,9 @@ function noteContent(node, detectedOutgoing, curated) {
   ).join('\n');
 }
 
-async function main() {
+export async function buildVault({ output = ROOT } = {}) {
+  const VAULT = path.join(path.resolve(output), 'vault');
+  const MANUAL_LINKS_PATH = path.join(path.resolve(output), 'data', 'manual-links.json');
   const rawEntries = await Promise.all(
     Object.entries(SOURCES).map(async ([key, url]) => [key, await load(url)])
   );
@@ -176,13 +174,19 @@ async function main() {
     Object.entries(FOLDERS).map(([type]) => [type, nodes.filter(n => n.type === type).length])
   );
 
-  console.log('Vault rebuilt:', counts);
-  console.log('Vault notes:', nodePaths.size);
-  console.log('Detected relationships:', detected.length);
-  console.log('Curated links exported:', manualLinks.length);
+  return { counts, nodes: nodePaths.size, detected: detected.length, manualLinks };
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const { values } = parseArgs({ options: { output: { type: 'string' } } });
+    const result = await buildVault({ output: values.output });
+    console.log('Vault rebuilt:', result.counts);
+    console.log('Vault notes:', result.nodes);
+    console.log('Detected relationships:', result.detected);
+    console.log('Curated links exported:', result.manualLinks.length);
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
+}
