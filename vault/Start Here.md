@@ -1,6 +1,6 @@
 # STS2 Stars
 
-This is the authoring vault behind the public graph at notkohrt.pro.
+This is the authoring vault behind [STS2 Stars](https://sts2stars.com/).
 
 Slay the Spire 2 and its game content are by [Mega Crit](https://www.megacrit.com/). This is an unofficial fan project; see [[README#Credits|Credits]] for attribution and the artwork permission request.
 

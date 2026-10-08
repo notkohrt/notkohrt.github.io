@@ -6,14 +6,14 @@ import { readSiteOrigin, renderSiteTemplate, siteOriginForDomain } from '../lib/
 const root = fileURLToPath(new URL('../', import.meta.url));
 try {
   const args = process.argv.slice(2);
-  if (args.length !== 1) throw new Error('Usage: npm run plan:domain -- sts2stars.io');
+  if (args.length !== 1) throw new Error('Usage: npm run plan:domain -- sts2stars.com');
   const origin = siteOriginForDomain(args[0]);
   renderSiteTemplate(await readFile(path.join(root, 'src/index.html'), 'utf8'), origin);
   console.log(JSON.stringify({
     currentOrigin: await readSiteOrigin(root),
     candidateOrigin: origin,
     availability: 'Not checked by this offline planner',
-    prerequisites: ['Confirm registration and renewal price', 'Register and verify ownership', 'Choose separate hosting for the developer site'],
+    prerequisites: ['Own the candidate domain and verify it in GitHub', 'Configure GitHub Pages DNS', 'Use separate hosting for the developer site'],
     repositoryChange: { file: 'CNAME', content: new URL(origin).hostname + '\n' },
     build: 'npm run build:site',
     validation: 'npm run check',

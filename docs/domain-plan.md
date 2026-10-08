@@ -1,38 +1,47 @@
-# STS2 Stars domain plan
+# STS2 Stars domain migration
 
-Compare **sts2stars.io** and **sts2stars.com** using verified registration and renewal prices before choosing. Neither name's availability nor current price has been verified. `notkohrt.pro` currently serves the working graph and is intended for the developer site later.
+The user confirmed the purchase of **sts2stars.com** on 2026-10-08. The intended primary URL is **https://sts2stars.com/**, with `www.sts2stars.com` redirecting to it. A live registry RDAP lookup confirmed Squarespace Domains LLC as the registrar and `nsc1` through `nsc4.squarespacedns.com` as its nameservers. Domain selection and registration are complete; price comparison is no longer needed.
 
-## What .io means
+`notkohrt.pro` currently serves the graph and is intended for the developer site later. This branch prepares `CNAME`, generated canonical/sharing URLs, production checks, the vault entry page, and the community draft for the new domain. Preparation does not itself change Squarespace DNS or the live Pages setting. Keep the current site live until DNS is configured and the migration can be published.
 
-`.io` is the country-code top-level domain assigned to the British Indian Ocean Territory. Tech projects commonly use it because I/O means input/output. The suffix does not require a particular hosting provider or change what the graph can do. `.com` is the familiar commercial suffix, widely used for projects of all kinds.
+## Squarespace DNS
 
-The tech association makes `.io` a reasonable fit for STS2 Stars; `.com` is usually cheaper to renew. Choose after comparing current quotes, rather than judging a first-year promotion alone.
+In the Squarespace domain dashboard, open **sts2stars.com → DNS → DNS Settings**. Replace the default website/parking records for the apex (`@`) and `www` with these custom records. Keep unrelated mail and verification records. Leave TTL at the provider's default.
 
-## Price and availability verification
+| Host | Type | Value |
+| --- | --- | --- |
+| `@` | A | `185.199.108.153` |
+| `@` | A | `185.199.109.153` |
+| `@` | A | `185.199.110.153` |
+| `@` | A | `185.199.111.153` |
+| `www` | CNAME | `notkohrt.github.io` |
 
-Useful first-party sources:
+IPv6 is optional. If using apex AAAA records, use GitHub's four addresses below; existing AAAA records pointing to another host must not remain alongside the Pages records.
 
-- [Porkbun .io prices](https://porkbun.com/tld/io) and [.com prices](https://porkbun.com/tld/com), including registration and renewal.
-- [Porkbun API documentation](https://porkbun.com/api/json/v3/documentation) and its public [pricing endpoint](https://api.porkbun.com/api/json/v3/pricing/get).
-- [IANA's .io delegation](https://www.iana.org/domains/root/db/io.html) and [RDAP bootstrap](https://data.iana.org/rdap/dns.json) for registry sources.
+| Host | Type | Value |
+| --- | --- | --- |
+| `@` | AAAA | `2606:50c0:8000::153` |
+| `@` | AAAA | `2606:50c0:8001::153` |
+| `@` | AAAA | `2606:50c0:8002::153` |
+| `@` | AAAA | `2606:50c0:8003::153` |
 
-Record the registrar, currency, standard registration fee, yearly renewal fee, applicable taxes/fees, and quote date. Check the exact name at the registrar: a standard TLD price is not an exact-name checkout quote, and a name can carry premium pricing. A missing DNS record does not establish that a domain is available.
+These addresses and the `www` target were checked against [GitHub's current Pages documentation](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site) on 2026-10-08. Use the exact `www` CNAME target without a scheme or repository path. Do not add wildcard records or Squarespace URL forwarding.
 
-The cloud's restricted egress policy blocked the registrar, public pricing API, and IANA requests with a proxy CONNECT 403 on 2026-10-08. No live prices are asserted here. Public read access is the missing prerequisite for an automated comparison; no registrar credentials are needed to read the public price sources.
+## Ownership protection
 
-Registration is a separate paid action after the name and price have been chosen. Keep payment and account details in the registrar's own checkout.
+GitHub recommends verifying the domain to protect its Pages association. In [personal GitHub Pages settings](https://github.com/settings/pages), choose **Add a domain**, enter `sts2stars.com`, and copy the generated TXT record into Squarespace. Its hostname is `_github-pages-challenge-notkohrt`; its value must come from GitHub. Return to GitHub and select **Verify** once the record resolves, then retain the TXT record. No verification value is invented or stored in this repository.
 
-## Hosting and migration
+See [GitHub's domain verification instructions](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/verifying-your-custom-domain-for-github-pages).
 
-GitHub Pages can continue hosting the static graph; a different suffix does not require paid hosting. Keep this repository as the source of truth. If both the project domain and developer domain use GitHub Pages, use separate Pages sites because each site has one configured custom domain.
+## Publish and verify
 
-1. Obtain verified prices, choose the exact domain, and register it.
-2. Verify ownership in GitHub before pointing the domain at Pages. Use GitHub's generated verification TXT record; do not invent one.
-3. Plan where the developer site will live before changing `notkohrt.pro`. The current graph can remain in this repository, with the developer site on a separate Pages site.
-4. Configure the owned project domain's DNS using the current [GitHub Pages instructions](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site). For a `www` alias, the GitHub target is `notkohrt.github.io`, without a repository path. Select apex records from the current official instructions and the chosen DNS provider's supported record types.
-5. Preview the repository changes with `npm run plan:domain -- sts2stars.io` (or `.com`). The command is offline and writes nothing.
-6. Set the chosen bare hostname in `CNAME`, run `npm run build:site`, and run `npm run check`. The builder fills canonical and sharing URLs from `CNAME`; production checks read the same value. Review and commit the generated HTML together with `CNAME`.
-7. Publish the owned domain through Pages, wait for DNS and certificate readiness, and enable HTTPS enforcement when the certificate is ready. Verify the exact deployed HTML and mobile interaction with the existing production job; TLS verification stays enabled.
-8. Update the Reddit post's final website link. Complete the draft before publishing and linking the permanent release ZIP.
+1. Confirm the apex A records and `www` CNAME are configured in Squarespace. DNS propagation can take up to 24 hours.
+2. Run `npm run plan:domain -- sts2stars.com`, `npm run build:site`, and `npm run check`. Review `CNAME` and generated `index.html` together. Run the existing browser checks; required CI jobs must pass before merging.
+3. Publish the migration to `main` and confirm the repository's Pages custom domain is `sts2stars.com`. If the CNAME commit does not update the setting automatically, save it in [repository Pages settings](https://github.com/notkohrt/notkohrt.github.io/settings/pages).
+4. Wait for the Pages certificate, then enable **Enforce HTTPS**. Certificate readiness can take up to 24 hours. Never disable TLS verification to make a check pass.
+5. Require the existing production job to pass against the new origin: exact deployed HTML, pinned counts, mobile search, and directed relationship tracing in Chromium and WebKit. Also check the sharing image and the `www` redirect. Until those checks succeed, the new domain is not confirmed live.
+6. Complete the Reddit draft, then build and verify the release ZIP from the clean release commit and publish its permanent download link. An expiring Actions artifact is not the community download URL.
 
-Domain registration, ownership verification, DNS changes, and migration have not been performed by this preparation work.
+The existing GitHub Pages hosting can serve the graph without additional paid hosting. A future developer site on `notkohrt.pro` needs its own hosting destination; each Pages site has one custom domain. Reassign that domain separately after the project migration works.
+
+The cloud can read registry and GitHub documentation HTTPS endpoints, but direct DNS resolution and requests to the project domains are currently blocked by its egress policy. This is a limitation of the local check, not evidence that the purchased domain is broken. Use the production workflow's live browser checks from GitHub's runner for deployment verification. Squarespace DNS editing and GitHub account-level domain verification require the user's account access.
