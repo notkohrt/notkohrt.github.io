@@ -1,6 +1,6 @@
 {
   "name": "sts2-stars",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "check:security": "node scripts/check-security.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:browser": "playwright test",
+    "analyze:deck": "node scripts/analyze-deck.mjs",
     "build:vault": "node scripts/build-vault.mjs",
     "build:preview": "node scripts/build-preview.mjs",
     "build:site": "node scripts/build-site.mjs",

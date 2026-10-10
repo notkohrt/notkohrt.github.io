@@ -178,6 +178,7 @@
       </div>
 
       <div class="graph-toolbar">
+        <button class="ghost-button" id="deck-toggle" type="button" aria-haspopup="dialog" aria-controls="deck-lab" disabled>Deck</button>
         <button class="icon-button" id="fit-graph" type="button" title="Fit graph" aria-label="Fit graph">◎</button>
         <button class="icon-button" id="zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
         <button class="icon-button" id="zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
@@ -201,7 +202,10 @@
           <div class="note-path" id="note-path">No note selected</div>
           <h2 id="note-panel-title">Reading view</h2>
         </div>
-        <button class="icon-button mobile-only" id="inspector-close" type="button" aria-label="Close note">×</button>
+        <div class="note-actions">
+          <button class="ghost-button mobile-only" id="deck-note-open" type="button" aria-label="Open deck lab" aria-haspopup="dialog" aria-controls="deck-lab" disabled>Deck</button>
+          <button class="icon-button mobile-only" id="inspector-close" type="button" aria-label="Close note">×</button>
+        </div>
       </div>
 
       <div class="inspector-empty" id="inspector-empty">
@@ -215,6 +219,7 @@
         <h2 id="entity-name" tabindex="-1"></h2>
         <div class="entity-meta" id="entity-meta"></div>
         <div class="entity-description" id="entity-description"></div>
+        <button class="ghost-button full-button hidden" id="deck-add" type="button">Add to deck</button>
 
         <div class="entity-facts hidden" id="entity-facts"></div>
 
@@ -267,6 +272,78 @@
       <span id="data-count"></span>
     </footer>
   </div>
+
+  <dialog class="deck-lab" id="deck-lab" aria-labelledby="deck-lab-title" aria-describedby="deck-lab-intro">
+    <header class="deck-lab-header">
+      <div><h2 id="deck-lab-title">Deck lab</h2><p id="deck-lab-intro">Explore mechanic coverage, printed costs, and draw consistency.</p></div>
+      <div class="deck-header-actions"><button class="ghost-button" id="deck-jump" type="button">Analysis</button><button class="icon-button" id="deck-close" type="button" aria-label="Close deck lab">×</button></div>
+    </header>
+    <p class="deck-meta" id="deck-meta"></p>
+    <p class="deck-message" id="deck-message" role="status" aria-atomic="true"></p>
+    <div class="deck-layout">
+      <section class="deck-builder" aria-labelledby="deck-builder-title">
+        <h3 id="deck-builder-title">Build your deck</h3>
+        <label for="deck-search">Find a card or relic</label>
+        <input id="deck-search" type="search" placeholder="Blade Dance, Tingsha…" autocomplete="off">
+        <label for="deck-color">Character / color</label>
+        <select id="deck-color"><option value="all">All colors</option></select>
+        <p id="deck-search-scope" class="deck-help"></p>
+        <button id="deck-pool-reset" class="ghost-button hidden" type="button">Clear mechanic filter</button>
+        <div class="deck-search-results" id="deck-search-results" aria-label="Matching cards and relics"></div>
+        <div class="deck-builder-actions">
+          <button class="ghost-button" id="deck-example" type="button">Load Silent example</button>
+          <button class="ghost-button" id="deck-clear" type="button">Clear deck</button>
+        </div>
+        <h3>Cards <span id="deck-size"></span></h3>
+        <p class="deck-help">Set copies and upgrade state. Click a name to read its graph note.</p>
+        <ul class="deck-items" id="deck-cards"></ul>
+        <h3>Relics</h3>
+        <ul class="deck-items" id="deck-relics"></ul>
+        <div class="deck-export-actions">
+          <button class="ghost-button" id="deck-save-json" type="button">Download deck JSON</button>
+          <button class="ghost-button" id="deck-import" type="button">Import deck JSON</button>
+          <button class="ghost-button" id="deck-save-note" type="button">Download Obsidian note</button>
+          <input class="hidden" id="deck-import-file" type="file" accept=".json,application/json" aria-label="Import deck JSON">
+        </div>
+        <p class="deck-help" id="deck-storage-help">Saved in this browser when local storage is available. Download JSON to keep a portable copy.</p>
+      </section>
+      <section class="deck-analysis" aria-labelledby="deck-analysis-title">
+        <h3 id="deck-analysis-title" tabindex="-1">Analysis</h3>
+        <div id="deck-overview"></div>
+        <details class="deck-pool">
+          <summary>Explore character card pools</summary>
+          <label for="deck-pool-color">Character pool</label>
+          <select id="deck-pool-color"><option value="silent">Silent</option><option value="ironclad">Ironclad</option><option value="defect">Defect</option><option value="necrobinder">Necrobinder</option><option value="regent">Regent</option></select>
+          <p id="deck-pool-summary" class="deck-help"></p>
+          <p class="deck-help">Counts of distinct base cards in Common/Uncommon/Rare pools. Starting cards, Ancient/event rewards, and tokens are excluded. Counts are not reward probabilities.</p>
+          <div id="deck-pool-results"></div>
+        </details>
+        <section aria-labelledby="deck-cost-title">
+          <h4 id="deck-cost-title">Printed Energy curve</h4>
+          <div id="deck-curve"></div>
+          <p class="deck-help">X and unknown costs are excluded from the fixed-cost average. Recorded Stars are a separate resource.</p>
+        </section>
+        <section aria-labelledby="deck-odds-title">
+          <h4 id="deck-odds-title">Uniform draw sample</h4>
+          <label for="deck-draws">Cards sampled without replacement</label>
+          <input id="deck-draws" type="number" min="0" max="500" value="5" inputmode="numeric" aria-describedby="deck-draw-help">
+          <p class="deck-help" id="deck-draw-help">Capped at deck size. Innate, starting-hand relics, tutors, and extra draw are not modeled.</p>
+          <div class="deck-pair-controls">
+            <label for="deck-pair-first">First combo piece<select id="deck-pair-first"><option value="">Choose a card</option></select></label>
+            <label for="deck-pair-second">Second combo piece<select id="deck-pair-second"><option value="">Choose a different card</option></select></label>
+          </div>
+          <p class="deck-pair-result" id="deck-pair-result" role="status" aria-atomic="true"></p>
+          <div class="deck-odds" id="deck-odds"></div>
+        </section>
+        <section aria-labelledby="deck-mechanics-title">
+          <h4 id="deck-mechanics-title">Detected mechanic coverage</h4>
+          <p class="deck-help">Base-card roles, including explicitly granted powers. Upgrade-exclusive mechanics may be absent. Shared mechanics suggest interactions to check; conditions and timing still matter.</p>
+          <div id="deck-mechanics"></div>
+        </section>
+        <details class="deck-assumptions" open><summary>What these results assume</summary><ul id="deck-assumptions"></ul></details>
+      </section>
+    </div>
+  </dialog>
 
   <div class="palette-backdrop hidden" id="palette-backdrop" role="presentation">
     <div class="command-palette" id="command-palette" role="dialog" aria-modal="true" aria-label="Quick switcher">

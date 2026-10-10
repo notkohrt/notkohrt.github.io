@@ -18,6 +18,12 @@ The downloaded build includes the generated notes and website. Its scripts and c
 
 The website treats curated links separately from text-derived links so subjective synergy does not silently become a factual game relationship.
 
+## Deck analysis
+
+The website's **Deck** button opens Deck lab for card counts, upgrades, relics, printed resource costs, detected mechanic coverage, and uniform draw probabilities. Use **Download Obsidian note** there, then place the exported Markdown file in this vault. Its card and power links use these generated note paths. The report records its source snapshot and sampling assumptions; it does not predict wins or simulate opening-hand rules.
+
+Card notes include recorded Star costs and upgrade facts. Energy cost upgrades show replacement values such as **2 → 1**. Keep personal deck reports when replacing an export; entity regeneration does not refresh those reports automatically.
+
 ## Relationship vocabulary
 
 Prefer specific mechanical verbs:

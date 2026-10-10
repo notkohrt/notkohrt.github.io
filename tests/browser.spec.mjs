@@ -272,18 +272,18 @@ test('inspector family filters preserve traces, follow graph eligibility, and ke
   await expect(family).toBeFocused();
   await expect(page.locator('#outgoing-list .relation')).toHaveCount(1);
   await expect(page.locator('#outgoing-list .relation')).toContainText('reduces');
-  await expect(page.locator('#outgoing-count')).toHaveText('1 / 2');
+  await expect(page.locator('#outgoing-count')).toHaveText('1 / 3');
   await expect(page.locator('#relationship-summary')).toHaveText('Resonance → grants → Strength');
   await page.locator('[data-relation-family="modification"]').uncheck();
   await expect(family).toHaveValue('modification');
   await expect(family.locator('option:checked')).toHaveText('Modify / retain (0)');
-  await expect(page.locator('#outgoing-count')).toHaveText('0 / 1');
+  await expect(page.locator('#outgoing-count')).toHaveText('0 / 2');
   await page.getByRole('button', { name: 'Clear search', exact: true }).click();
   await expect(search).toBeFocused();
   await expect(page.locator('.relation-trace[data-edge-id="' + grants + '"]')).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('combobox', { name: 'Order by' }).selectOption('relation');
   await page.getByRole('button', { name: 'Reset', exact: true }).click();
-  await expect(page.locator('#outgoing-list .relation-type')).toHaveText([/grants/, /reduces/]);
+  await expect(page.locator('#outgoing-list .relation-type')).toHaveText([/grants/, /reduces/, /requires Stars/]);
 });
 
 test('mobile connection search and tracing preserve the selected note and search', async ({ page }) => {

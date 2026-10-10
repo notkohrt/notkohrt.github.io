@@ -3,6 +3,8 @@ import { assignEdgeLanes, edgeGeometry, uniqueLayoutLinks } from './lib/graph-ge
 import { loadJson } from './lib/browser-data.mjs';
 import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
 import { PROJECT_NAME, PROJECT_TITLE } from './lib/project.mjs';
+import { costText, upgradeFacts } from './lib/card-facts.mjs';
+import { mountDeckLab } from './lib/deck-lab-ui.mjs';
 
 (() => {
   const RELATION_FAMILY_LABELS = Object.fromEntries(Object.entries(RELATION_FAMILIES).map(([id, family]) => [id, family.label]));
@@ -90,6 +92,7 @@ import { PROJECT_NAME, PROJECT_TITLE } from './lib/project.mjs';
     inspectorId: null,
     inspectorLimits: { outgoing: 50, incoming: 50 },
     inspectorRelations: { outgoing: [], incoming: [] },
+    deckLab: null,
 
     draggingNode: null,
     panning: false,
@@ -220,6 +223,7 @@ import { PROJECT_NAME, PROJECT_TITLE } from './lib/project.mjs';
 
   function syncAnimation() {
     const paused = document.hidden || !$('palette-backdrop').classList.contains('hidden') ||
+      Boolean(state.deckLab?.isOpen) ||
       Boolean(document.activeElement?.closest('.connection-tools'));
     state.animationPaused = paused;
     if (paused) state.simulation?.stop();
@@ -971,6 +975,10 @@ import { PROJECT_NAME, PROJECT_TITLE } from './lib/project.mjs';
     $('palette-input').addEventListener('keydown', handlePaletteKeys);
     $('clear-connection').addEventListener('click', () => traceRelationship(null));
     $('clear-connection-caption').addEventListener('click', () => traceRelationship(null));
+    $('deck-add').addEventListener('click', () => {
+      state.deckLab.add(state.focusedId);
+      state.deckLab.open($('deck-add'));
+    });
     const connectionTools = document.querySelector('.connection-tools');
     connectionTools.addEventListener('focusin', syncAnimation);
     connectionTools.addEventListener('focusout', () => queueMicrotask(syncAnimation));
@@ -1011,6 +1019,9 @@ import { PROJECT_NAME, PROJECT_TITLE } from './lib/project.mjs';
     window.addEventListener('popstate', syncFocusFromUrl);
 
     document.addEventListener('keydown', e => {
+      // Native dialog supplies focus trapping and Escape. Graph shortcuts must
+      // not change the selection or open another modal while building a deck.
+      if (state.deckLab?.isOpen) return;
       if (!$('palette-backdrop').classList.contains('hidden') && e.key === 'Tab') {
         const first = $('palette-input'), last = $('palette-close');
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
@@ -1360,12 +1371,15 @@ import { PROJECT_NAME, PROJECT_TITLE } from './lib/project.mjs';
       node.color,
       node.rarity,
       node.cardType,
-      node.cost !== undefined && node.type === 'card' ? (node.cost === -1 ? 'X cost' : node.cost + ' cost') : '',
+      node.type === 'card' ? costText(node.cost) + ' Energy' : '',
+      node.starCost !== undefined ? costText(node.starCost) + ' Stars' : '',
       node.degree ? node.degree + ' links' : ''
     ].filter(Boolean);
 
     $('entity-meta').innerHTML = chips.map(c => '<span class="chip">' + htmlEsc(c) + '</span>').join('');
     $('entity-description').textContent = node.description || 'No description available.';
+    $('deck-add').classList.toggle('hidden', !['card', 'relic'].includes(node.type));
+    $('deck-add').textContent = node.type === 'relic' ? 'Add relic to deck lab' : 'Add card to deck lab';
 
     const facts = [];
     if (node.type === 'card') {
@@ -1395,14 +1409,10 @@ import { PROJECT_NAME, PROJECT_TITLE } from './lib/project.mjs';
     if (Object.keys(upgrade).length) {
       $('upgrade-section').classList.remove('hidden');
       const description = upgrade.description ? '<div class="upgrade-card">' + htmlEsc(upgrade.description) + '</div>' : '';
-      const deltas = Object.entries(upgrade)
-        .filter(([key]) => key !== 'description')
-        .map(([key, value]) =>
-          '<div class="upgrade-delta"><span class="upgrade-key">' + htmlEsc(key.replace(/_/g, ' ')) +
-          '</span><span class="upgrade-value">' + htmlEsc(
-            typeof value === 'number' ? (value > 0 ? '+' + value : String(value)) :
-            Array.isArray(value) ? value.join(', ') : String(value)
-          ) + '</span></div>'
+      const deltas = upgradeFacts(node)
+        .map(({ label, text }) =>
+          '<div class="upgrade-delta"><span class="upgrade-key">' + htmlEsc(label) +
+          '</span><span class="upgrade-value">' + htmlEsc(text) + '</span></div>'
         ).join('');
       $('upgrade-card').innerHTML = description + deltas;
     } else {
@@ -1649,6 +1659,12 @@ import { PROJECT_NAME, PROJECT_TITLE } from './lib/project.mjs';
       phase = 'graph';
       $('loading-message').textContent = 'Starting the graph renderer.';
       initPixi();
+      state.deckLab = mountDeckLab({
+        nodes: state.nodes, edges: state.edges, meta: state.datasetMeta,
+        onInspect: id => { focusNode(id); $('entity-name').focus({ preventScroll: true }); },
+        onTrace: (edgeId, rootId) => { focusNode(rootId); traceRelationship(edgeId); },
+        onPause: syncAnimation
+      });
       setupControls();
       applyFilters(false);
 

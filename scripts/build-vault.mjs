@@ -1,5 +1,6 @@
 import { SOURCES, TYPE_FOLDERS as FOLDERS, normalizeData, buildEdges, createNodePaths, isMechanicalRelation } from '../lib/graph-model.mjs';
 import { PROJECT_NAME } from '../lib/project.mjs';
+import { upgradeFacts } from '../lib/card-facts.mjs';
 import { fileURLToPath } from 'node:url';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
@@ -71,6 +72,7 @@ export function noteContent(node, detectedOutgoing, curated) {
     node.rarity ? 'rarity: ' + yaml(node.rarity) : null,
     node.cardType ? 'card_type: ' + yaml(node.cardType) : null,
     node.cost !== undefined ? 'cost: ' + yaml(node.cost) : null,
+    node.starCost !== undefined ? 'star_cost: ' + yaml(node.starCost) : null,
     node.keywords && node.keywords.length ? 'keywords: ' + yaml(node.keywords) : null,
     node.tags && node.tags.length ? 'tags: ' + yaml(node.tags) : null,
     node.target ? 'target: ' + yaml(node.target) : null,
@@ -81,6 +83,12 @@ export function noteContent(node, detectedOutgoing, curated) {
     '',
     node.description || '_No description available._',
     '',
+    ...(node.type === 'card' && Object.keys(node.upgrade || {}).length ? [
+      '## Upgrade', '',
+      ...(node.upgrade.description ? [node.upgrade.description, ''] : []),
+      ...upgradeFacts(node).map(fact => '- ' + fact.label + ': ' + fact.text),
+      ''
+    ] : []),
     '## Detected relationships',
     ''
   ].filter(line => line !== null);
