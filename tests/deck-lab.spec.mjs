@@ -10,15 +10,28 @@ const test = base.extend({
   }
 });
 
+async function openDeck(page) {
+  const readingOnMobile = await page.locator('#inspector-panel').evaluate(el => innerWidth <= 900 && el.classList.contains('open'));
+  const launcher = page.locator(readingOnMobile ? '#deck-note-open' : '#deck-toggle');
+  await launcher.click();
+  await expect(page.getByRole('dialog', { name: 'Deck lab' })).toBeVisible();
+  return launcher;
+}
+
 async function ready(page, url = '/') {
   await page.goto(url);
   await expect(page.locator('#dataset-status')).toHaveClass(/ready/);
-  await page.getByRole('button', { name: 'Deck', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Deck lab' })).toBeVisible();
+  return openDeck(page);
 }
 
 test('sample deck gives exact pair odds, persists variants, and exports an Obsidian report', async ({ page }) => {
-  await ready(page, '/?node=card:SHIV');
+  await page.setViewportSize({ width: 390, height: 844 });
+  // Pointer activation need not focus buttons (as on Safari). Returning from
+  // the dialog must still reach its actual launcher.
+  await page.addInitScript(() => document.addEventListener('click', event => {
+    if (event.target.closest('#deck-toggle, #deck-note-open')) document.activeElement?.blur();
+  }, true));
+  const launcher = await ready(page, '/?node=card:SHIV');
   await page.getByRole('button', { name: 'Load Silent example' }).click();
   await expect(page.locator('#deck-size')).toHaveText('(20)');
   await page.getByLabel('First combo piece').selectOption('card:BLADE_DANCE');
@@ -36,11 +49,11 @@ test('sample deck gives exact pair odds, persists variants, and exports an Obsid
   expect(report).toContain('Innate');
   await page.keyboard.press('Escape');
   await expect(page.locator('#deck-lab')).not.toBeVisible();
-  await expect(page.locator('#deck-toggle')).toBeFocused();
+  await expect(launcher).toBeFocused();
   expect(new URL(page.url()).searchParams.get('node')).toBe('card:SHIV');
   await page.reload();
   await expect(page.locator('#dataset-status')).toHaveClass(/ready/);
-  await page.locator('#deck-toggle').click();
+  await openDeck(page);
   await expect(page.locator('#deck-size')).toHaveText('(20)');
   await expect(page.getByLabel('First combo piece')).toHaveValue('card:BLADE_DANCE');
   await expect(page.locator('#deck-pair-result')).toContainText('9.6%');

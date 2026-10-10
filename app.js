@@ -977,7 +977,7 @@ import { mountDeckLab } from './lib/deck-lab-ui.mjs';
     $('clear-connection-caption').addEventListener('click', () => traceRelationship(null));
     $('deck-add').addEventListener('click', () => {
       state.deckLab.add(state.focusedId);
-      state.deckLab.open();
+      state.deckLab.open($('deck-add'));
     });
     const connectionTools = document.querySelector('.connection-tools');
     connectionTools.addEventListener('focusin', syncAnimation);
