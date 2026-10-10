@@ -21,6 +21,12 @@ async function openDeck(page) {
 async function ready(page, url = '/') {
   await page.goto(url);
   await expect(page.locator('#dataset-status')).toHaveClass(/ready/);
+  expect(await page.locator('.topbar').evaluate(header => [...header.querySelectorAll('button')].every(button => {
+    const box = button.getBoundingClientRect();
+    if (button.disabled || !box.width || !box.height) return true;
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return box.left >= 0 && box.right <= innerWidth && (hit === button || button.contains(hit));
+  }))).toBe(true);
   return openDeck(page);
 }
 
