@@ -37,7 +37,7 @@ jobs:
           cache: npm
       - name: Install locked test dependencies
         run: npm ci --ignore-scripts
-      - name: Check generated index, syntax, emitted graph semantics, and website/vault parity
+      - name: Check graph semantics, exact deck probabilities, and website/vault parity
         run: npm run check
       - name: Build and verify the complete v1 website and vault package
         run: |
@@ -104,7 +104,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Install Chromium, WebKit, and system dependencies
         run: npx playwright install --with-deps chromium webkit
-      - name: Check previews, connections, inspector controls, and mobile/Safari startup
+      - name: Check previews, inspector, deck lab, and mobile/Safari startup
         run: npm run test:browser
       - name: Upload browser failure traces
         if: failure()

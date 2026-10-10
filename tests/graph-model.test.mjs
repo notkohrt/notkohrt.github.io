@@ -292,10 +292,12 @@ for (const [source, target, expected] of [
   test('pinned regression: ' + source + ' → ' + target, () => assert.deepEqual(relations(source, target), expected));
 }
 
-test('every character override replaces inferred roles exactly', () => {
+test('character overrides replace inferred roles while retaining independent printed-cost facts', () => {
   for (const [source, target, expected] of SEMANTIC_OVERRIDES) {
-    assert.deepEqual(relations(source, target), [...expected].sort(), source + ' → ' + target);
-    assert.ok(edges.filter(edge => edge.source === source && edge.target === target).every(edge => edge.provenance === 'curated'));
+    const overridden = edges.filter(edge => edge.source === source && edge.target === target)
+      .filter(edge => !(edge.provenance === 'explicit' && edge.relation === 'requires Stars'));
+    assert.deepEqual(overridden.map(edge => edge.relation).sort(), [...expected].sort(), source + ' → ' + target);
+    assert.ok(overridden.every(edge => edge.provenance === 'curated'));
   }
 });
 

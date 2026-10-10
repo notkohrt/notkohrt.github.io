@@ -81,6 +81,13 @@ test('the live site serves this build and supports mobile search and relationshi
   await page.locator('.relation-trace[data-edge-id="card:RESONANCE|power:STRENGTH_POWER|grants"]').click();
   await expect(page.locator('#connection-caption-text')).toHaveText('Resonance → grants → Strength');
   await expect(page.locator('#connection-caption')).toBeVisible();
+  await page.getByRole('button', { name: 'Deck', exact: true }).click();
+  await page.getByRole('button', { name: 'Load Silent example' }).click();
+  await expect(page.locator('#deck-size')).toHaveText('(20)');
+  await page.getByLabel('First combo piece').selectOption('card:BLADE_DANCE');
+  await page.getByLabel('Second combo piece').selectOption('card:ACCURACY');
+  await expect(page.locator('#deck-pair-result')).toContainText('9.6%');
+  await page.getByRole('button', { name: 'Close deck lab' }).click();
   expect(runtimeRequests).toEqual([]);
   expect(errors).toEqual([]);
 });
