@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: './tests',
   testMatch: '**/*.spec.mjs',
   fullyParallel: true,
+  maxFailures: process.env.CI ? 1 : 0,
   // These tests exercise a real WebGL/force graph, including software rendering.
   // A single browser avoids competing for GPU resources on small CI machines.
   workers: 1,
