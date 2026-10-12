@@ -20,7 +20,7 @@ export default defineConfig({
     // Run the smaller Safari/mobile suite first for early regression feedback.
     {
       name: 'webkit',
-      testMatch: ['**/startup.spec.mjs', '**/webkit-file.spec.mjs', '**/deck-lab.spec.mjs'],
+      testMatch: ['**/startup.spec.mjs', '**/webkit-file.spec.mjs', '**/deck-lab.spec.mjs', '**/offline.spec.mjs'],
       use: { browserName: 'webkit', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
     },
     {

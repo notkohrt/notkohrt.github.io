@@ -14,6 +14,7 @@
     "build:site": "node scripts/build-site.mjs",
     "plan:domain": "node scripts/plan-domain.mjs",
     "build:v1": "node scripts/build-v1.mjs",
+    "build:offline": "node scripts/build-offline.mjs",
     "verify:v1": "node scripts/build-v1.mjs --verify",
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore-backup.mjs"

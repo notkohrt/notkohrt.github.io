@@ -5,6 +5,7 @@ import { indexRelations, selectRelations } from './lib/inspector-model.mjs';
 import { PROJECT_NAME, PROJECT_TITLE } from './lib/project.mjs';
 import { costText, upgradeFacts } from './lib/card-facts.mjs';
 import { mountDeckLab } from './lib/deck-lab-ui.mjs';
+import { mountOfflineStatus } from './lib/offline-ui.mjs';
 
 (() => {
   const RELATION_FAMILY_LABELS = Object.fromEntries(Object.entries(RELATION_FAMILIES).map(([id, family]) => [id, family.label]));
@@ -1682,6 +1683,7 @@ import { mountDeckLab } from './lib/deck-lab-ui.mjs';
       $('dataset-status').classList.add('ready');
       const version = state.datasetMeta.game_data_version ? 'v' + state.datasetMeta.game_data_version : 'snapshot';
       $('dataset-status').innerHTML = '<span class="status-dot"></span><span>' + htmlEsc(version) + ' ready</span>';
+      mountOfflineStatus(state.datasetMeta);
       $('data-count').textContent = state.nodes.length + ' notes · ' + state.edges.length + ' links';
       if ($('data-snapshot')) {
         const shortSha = String(state.datasetMeta.source_commit || '').slice(0, 7);

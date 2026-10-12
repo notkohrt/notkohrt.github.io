@@ -8,21 +8,18 @@ import { buildV1 } from '../scripts/build-v1.mjs';
 
 const test = base.extend({
   page: async ({ page }, use) => {
-    // Exercise the production HTML and real pinned libraries without requiring
-    // external CDN availability. Source-mode libraries also enforce SRI.
-    for (const [url, file] of [
-      ['https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js', '../node_modules/pixi.js/dist/pixi.min.js'],
-      ['https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js', '../node_modules/d3/dist/d3.min.js']
-    ]) {
-      await page.route(url, route => route.fulfill({ path: fileURLToPath(new URL(file, import.meta.url)), contentType: 'text/javascript', headers: { 'access-control-allow-origin': '*' } }));
-    }
-    await page.route('https://spire-codex.com/**', route => route.abort());
+    // Source mode now loads the actual checked-in libraries. External requests
+    // are forbidden, rather than supplied by a test-only CDN replacement.
+    await page.route(/^https:\/\//, route => route.abort());
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await use(page);
     expect(errors).toEqual([]);
   }
 });
+// These preview/graph tests deliberately isolate HTML behavior. Real service
+// worker installation/offline navigation is covered in offline.spec.mjs.
+test.use({ serviceWorkers: 'block' });
 
 async function ready(page, path = '/') {
   await page.goto(path);
@@ -144,6 +141,7 @@ test('standalone preview supports desktop and mobile navigation without linked a
 });
 
 test('the packaged v1 website supports desktop and mobile reading with all asset requests blocked', async ({ page }) => {
+  test.setTimeout(60000); // Includes full vault generation and package verification.
   const directory = await mkdtemp(path.join(tmpdir(), 'sts2-v1-browser-'));
   try {
     const result = await buildV1(path.join(directory, 'build'));
