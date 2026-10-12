@@ -59,7 +59,8 @@ export async function offlineServer(mount = '/') {
     response.end(bytes);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const baseURL = 'http://127.0.0.1:' + server.address().port + mount;
+  const port = server.address().port;
+  const baseURL = 'http://127.0.0.1:' + port + mount;
   let stopped = false;
   async function stop() {
     if (stopped) return;
@@ -67,7 +68,12 @@ export async function offlineServer(mount = '/') {
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));
   }
-  return { baseURL, state, stop, async close() {
+  async function start() {
+    if (!stopped) return;
+    await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
+    stopped = false;
+  }
+  return { baseURL, state, stop, start, async close() {
     await stop();
     await rm(directory, { recursive: true, force: true });
   } };

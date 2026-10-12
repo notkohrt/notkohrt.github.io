@@ -28,13 +28,32 @@ async function openControls(page) {
   if (await toggle.isVisible() && await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
 }
 
-test('one online load supports a fresh offline launch, deep links, graph, inspector, filters and local analysis', async ({ page, context, app }) => {
+async function connectionHint(page, offline) {
+  await page.evaluate(value => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => !value });
+    window.dispatchEvent(new Event(value ? 'offline' : 'online'));
+  }, offline);
+}
+
+async function network(context, app, browserName, offline) {
+  if (browserName === 'webkit' || process.env.PLAYWRIGHT_OFFLINE_STOP_ORIGIN === '1') {
+    // WebKit's devtools offline emulator can fail before dispatching a cold
+    // navigation to its worker. Stop the actual origin instead: cache misses
+    // cannot succeed, and no route mock supplies a response. The separate OS
+    // connection hint exercises the app's optional-link/status behavior.
+    if (offline) await app.stop();
+    else await app.start();
+    for (const page of context.pages()) await connectionHint(page, offline);
+  } else await context.setOffline(offline);
+}
+
+test('one online load supports a fresh offline launch, deep links, graph, inspector, filters and local analysis', async ({ page, context, app, browserName }) => {
   const errors = [], external = [];
   context.on('page', opened => opened.on('pageerror', error => errors.push(error.message)));
   context.on('request', request => { if (new URL(request.url()).origin !== new URL(app.baseURL).origin) external.push(request.url()); });
   await installed(page, app.baseURL);
   await page.close();
-  await context.setOffline(true);
+  await network(context, app, browserName, true);
   const offline = await context.newPage();
   const response = await offline.goto(app.baseURL + 'index.html?node=card:SHIV&offline-test=1');
   expect(response.fromServiceWorker()).toBe(true);
@@ -42,8 +61,8 @@ test('one online load supports a fresh offline launch, deep links, graph, inspec
   // Chromium can reset navigator.onLine during a worker-backed navigation
   // while network requests remain blocked. Reapply the OS connection signal
   // after separately proving that the cold navigation came from the worker.
-  await context.setOffline(false);
-  await context.setOffline(true);
+  if (browserName === 'webkit') await connectionHint(offline, true);
+  else { await context.setOffline(false); await context.setOffline(true); }
   await expect(offline.locator('#offline-status')).toContainText('Offline · v0.107.1');
   await expect(offline.locator('#offline-status')).toBeVisible();
   await expect(offline.locator('#graph-canvas canvas')).toHaveCount(1);
@@ -93,7 +112,7 @@ test('missing browser storage is repaired from the exact pinned deployment on an
   })).toBe(true);
 });
 
-test('a complete update waits for acceptance, applies offline, preserves deep links and leaves other tabs consistent', async ({ page, context, app }) => {
+test('a complete update waits for acceptance, applies offline, preserves deep links and leaves other tabs consistent', async ({ page, context, app, browserName }) => {
   await installed(page, app.baseURL + '?node=card:SHIV');
   const other = await context.newPage();
   await installed(other, app.baseURL + '?node=card:RESONANCE');
@@ -104,7 +123,7 @@ test('a complete update waits for acceptance, applies offline, preserves deep li
   await expect.poll(() => page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration()).waiting)), { timeout: 20000 }).toBe(true);
   await expect(page.locator('#offline-status')).toContainText('Update ready · v0.107.1');
   await expect(page.locator('#entity-description')).toContainText('Deal 4 damage.');
-  await context.setOffline(true);
+  await network(context, app, browserName, true);
   await openControls(page);
   await page.locator('#app-update').click();
   await expect(page.locator('#dataset-status')).toContainText('v0.107.2-test');
@@ -126,7 +145,7 @@ test('a complete update waits for acceptance, applies offline, preserves deep li
 });
 
 for (const failure of ['missing', 'mismatch']) {
-  test('a ' + failure + ' update retains the previous complete offline app and recovers on retry', async ({ page, context, app }) => {
+  test('a ' + failure + ' update retains the previous complete offline app and recovers on retry', async ({ page, context, app, browserName }) => {
     await installed(page, app.baseURL + '?node=card:SHIV');
     app.state.version = 1;
     app.state.failure = failure;
@@ -146,12 +165,12 @@ for (const failure of ['missing', 'mismatch']) {
     expect(outcome).toBe('redundant');
     expect(await page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration()).waiting))).toBe(false);
     expect((await page.evaluate(() => caches.keys())).filter(name => name.startsWith('sts2-stars:'))).toHaveLength(1);
-    await context.setOffline(true);
+    await network(context, app, browserName, true);
     await page.reload();
     await expect(page.locator('#dataset-status')).toContainText('v0.107.1');
     await expect(page.locator('#entity-description')).toContainText('Deal 4 damage.');
     app.state.failure = null;
-    await context.setOffline(false);
+    await network(context, app, browserName, false);
     await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
     await expect.poll(() => page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration()).waiting)), { timeout: 20000 }).toBe(true);
   });
@@ -168,14 +187,14 @@ test('first-install download failure is visible and a successful reload repairs 
   await installed(page, app.baseURL);
 });
 
-test('nested-path installation resolves local assets and offline deep links within its scope', async ({ page, context }) => {
+test('nested-path installation resolves local assets and offline deep links within its scope', async ({ page, context, browserName }) => {
   const app = await offlineServer('/reference/stars/');
   try {
     await installed(page, app.baseURL + '?node=card:SHIV');
     const manifest = await page.evaluate(async () => (await fetch('./manifest.webmanifest')).json());
     expect(manifest.start_url).toBe('./');
     expect(manifest.scope).toBe('./');
-    await context.setOffline(true);
+    await network(context, app, browserName, true);
     const response = await page.goto(app.baseURL + '?node=card:RESONANCE&another=link');
     expect(response.fromServiceWorker()).toBe(true);
     await expect(page.locator('#entity-name')).toHaveText('Resonance');
