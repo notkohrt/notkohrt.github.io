@@ -20,7 +20,7 @@ test('unversioned extra code and mismatched versions cannot enter generated prev
   assert.throws(() => validateSourceScripts(template.replace('</body>', '<script src="https://example.invalid/widget.js"></script></body>'), libraries), /Unexpected runtime script/);
   assert.throws(() => validateSourceScripts(template.replace('</body>', '<script src=https://example.invalid/widget.js></script></body>'), libraries), /Unexpected runtime script/);
   assert.throws(() => validateSourceScripts(template.replace('</body>', '<script>window.untrusted = true;</script></body>'), libraries), /Unexpected runtime script/);
-  assert.throws(() => validateSourceScripts(template.replace('pixi.js@7.4.2', 'pixi.js@latest'), libraries), /locked version/);
+  assert.throws(() => validateSourceScripts(template.replace('pixi-7.4.2.min.js', 'pixi-latest.min.js'), libraries), /locked version/);
   const unpinned = structuredClone(manifest);
   unpinned.devDependencies.d3 = '^7.9.0';
   await assert.rejects(pinnedLibraries(root, unpinned), /exact version/);

@@ -2,6 +2,7 @@
 /playwright-report/
 /test-results/
 /dist/
+__pycache__/
 /data/.sts2-update/
 /.env
 /.env.*

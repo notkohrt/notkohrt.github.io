@@ -6,7 +6,7 @@ The public graph is intentionally built from a **pinned local snapshot** of Spir
 
 The website is a generated, self-contained `index.html`. It embeds the stylesheet, Pixi 7.4.2, d3 7.9.0, browser code, and pinned JSON snapshot, so an HTML-only preview can render the graph. It loads no external runtime scripts. The graph's hover labels and inspector provide its reading UI. Deployment still serves static files and needs no npm runtime.
 
-Edit `src/index.html`, `styles.css`, `app.js`, and `lib/` as source files, then run `npm run build:site` to regenerate the root `index.html`. esbuild is an exact, lockfile-pinned development dependency. Generated HTML has a source notice and is marked generated for GitHub diff display. Do not hand-edit the generated file. `npm run check` rebuilds it in memory and rejects any mismatch, including changes to the pinned snapshot or curated links.
+Edit `src/index.html`, `styles.css`, `app.js`, and `lib/` as source files, then run `npm run build:site` to regenerate `index.html` and `sw.js`. esbuild is an exact, lockfile-pinned development dependency. Do not hand-edit generated files. `npm run check` rebuilds both in memory and rejects any mismatch, including changes to the snapshot, curated links, or precached assets.
 
 Rendering is scheduled on simulation ticks and interaction changes. Settled layouts stop rebuilding edges; opening the quick switcher, hiding the tab, or focusing the inspector's connection controls pauses simulation work. Leaving the connection controls resumes an unfinished layout. Camera changes and selection still request a frame.
 
@@ -34,7 +34,7 @@ npm run check
 python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
-`package.json` contains development dependencies only, including libraries bundled into the public page. Browser tests use the exact pinned Pixi/d3 distributions from the integrity-checked lockfile. Source-mode CDN scripts additionally require SHA-384 integrity matching those distributions; the builder rejects missing or mismatched integrity and unexpected script sources.
+`package.json` contains development dependencies only, including libraries bundled into the public page. `vendor/` holds the source-mode Pixi/d3 distributions and licenses, copied byte-for-byte from the exact locked packages. Security validation compares those files to the installed packages and verifies local paths and SHA-384 integrity in the template. There are no runtime CDN dependencies.
 
 After source or data changes:
 
@@ -70,7 +70,7 @@ The builder uses the same website renderer and vault generator without rewriting
 
 Verification rejects missing, extra, duplicate, unsafe, symlinked, or changed files; compares the embedded website snapshot to the packaged data; and checks every entity note and curated export against the shared model. Use the verifier from the recorded source commit when checking an older build whose semantic parsers or note templates may differ. Browser tests exercise the packaged `index.html` with all linked assets and external requests blocked, including mobile navigation and connection tracing.
 
-Download **sts2-stars-v1** from a successful validation run's Artifacts section, sign in to GitHub if prompted, and extract the ZIP before opening `index.html` or the `vault` folder. Actions retains this artifact for 90 days. A workspace file link is not a registered ChatGPT download artifact and can produce “could not download artifact”; use the GitHub artifact link and keep an independent copy. The complete build is an export; the separate recovery artifact preserves source history and authored state for restoration.
+Download **sts2-stars-v1** or **sts2-stars-offline** from a successful validation run's Artifacts section, sign in to GitHub if prompted, and extract the ZIP. For reliable installation use the included localhost server or the hosted HTTPS PWA; open `vault` separately in Obsidian. Actions retains these artifacts for 90 days. A workspace file link is not a registered ChatGPT download artifact and can produce “could not download artifact”; use the GitHub artifact link and keep an independent copy. The complete build is an export; the separate recovery artifact preserves source history and authored state for restoration.
 
 `lib/project.mjs` supplies the project name and slug to browser titles, export builders, and future snapshot metadata. Keep the static HTML branding, package metadata, CI artifact names, and documentation in sync. The existing `sts2-bubble-build-v1` and `sts2-bubble-recovery-v1` format identifiers are stable compatibility identifiers, retained across the STS2 Stars rename. The pinned snapshot's historical metadata is unchanged; rebranding does not rewrite game data or mechanics.
 
@@ -97,6 +97,42 @@ node scripts/build-vault.mjs --output /tmp/sts2-vault
 ```
 
 This reads the pinned repository data and existing curated blocks, and writes entity notes plus `data/manual-links.json` under the output directory. To edit curated relationships there, open that directory's `vault` folder and regenerate using the same output path. The default command still writes into the repository's `vault` and exports the authored layer to the website.
+
+## Installed offline app
+
+The static GitHub Pages site is an installable PWA. `.nojekyll` bypasses the legacy Pages/Jekyll pipeline so local assets are served as static files; the offline bundle includes the same marker for static hosting. `manifest.webmanifest` uses relative identity/start/scope URLs and original local 192/512px icons; the 512px image fits the maskable safe area. An Apple touch icon supports iOS installation. No backend, account, CDN, runtime game-data API, font download, or remote artwork is required. Graph/wiki behavior and the shared semantic/vault pipeline are unchanged.
+
+After loading online, wait for **Offline ready · v…** in the footer. This confirms a complete saved app, not just a registered worker. The status remains visible on mobile; entity counts remain available in the graph summary. Controls explains availability and exposes **Update app**. The displayed version is the pinned game-data version. Blocked storage, failed installation, insecure origins, file URLs, and sandboxed previews retain the self-contained graph and report that offline relaunch is unavailable.
+
+`scripts/build-pwa.mjs` generates `sw.js` from `src/service-worker.js`. Its version hashes the worker source and every core file: embedded HTML/code/styles/data, pinned JSON and curated export, manifest/icons, credits, local libraries/licenses, and sharing image. Including worker source gives worker-only fixes a separate cache, so a failed install cannot delete the old worker's active cache. HTML also identifies its embedded app build. Builds use no timestamps or runtime network data. Regenerate with `npm run build:site` after changing any core input; CI rejects stale HTML or worker code.
+
+Installation bypasses the HTTP cache and verifies every download's exact SHA-256 before accepting a cache. Missing files, redirects, corruption, and mixed Pages deployments fail installation without replacing the prior active cache. Names include the complete registration scope, so nested installations cannot delete each other's caches. Core files are served from cache first; unchecked network responses never enter an accepted version. Root and `index.html` navigations share one complete cached page while retaining query strings/deep links. Unknown paths and external origins are not rewritten into the graph. Only the fixed core file list is cached, and activation removes all earlier versions for this scope.
+
+Updates wait for explicit acceptance or until all old app tabs close. **Update app** activates the verified cache and reloads the current URL, even offline. Other tabs retain their complete old embedded code/data and offer a reload. Activation deletes only earlier caches for that scope. Browser checks and explicit startup/online-visible checks (at most once per minute) discover deployments with `updateViaCache: none`. Failed checks leave the working copy intact. A worker update never refreshes the game dataset independently: snapshot changes still require the reviewed repository pipeline.
+
+Graph rendering, search, filters, inspector, semantic relationships, deep links, and local deck analysis/import/export work offline. External source, attribution-site, and feedback links remain optional; when the browser reports no connection, clicking them shows a notice and retains the app. Clipboard/share APIs retain existing fallbacks. The generated Obsidian vault remains ordinary local Markdown.
+
+Browser/OS storage eviction, clearing site data, private browsing, or changing origin/port can remove a saved installation. Reconnect and reload: an active worker checks completeness and can repair its exact cache; if those old files are no longer hosted, accept the new complete deployment. Offline mode cannot retain storage the device deletes. Service workers require HTTPS or loopback localhost; an ordinary HTTP LAN address is not a secure context on phones. Direct `file://` opening remains a portable preview, not the supported installation route.
+
+### Device acceptance checks
+
+1. **iPhone/iPad:** load the HTTPS site in Safari online, wait for **Offline ready**, then Share → Add to Home Screen (enable Open as Web App if offered). Launch the installed icon once online and confirm readiness there too; storage contexts can differ. Enable airplane mode, turn Wi-Fi off, close/relaunch the installed app, search for Shiv, follow a relationship, change filters, and test a `?node=…` URL. Files Quick Look is not this test.
+2. **Android:** load in Chrome, wait for readiness, and use Install app / Add to Home screen. Launch once online, confirm readiness, then disable Wi-Fi/mobile data and close/relaunch. Check graph/wiki navigation and local export. Installation labels vary by device.
+3. **Steam Deck:** use Chrome/Chromium in Desktop Mode and its install-app menu after readiness. Disconnect Wi-Fi and quit/relaunch. Firefox supports the cached site but has no built-in desktop PWA installation UI. Alternatively extract the offline bundle, run `python3 serve.py`, and open `http://localhost:8123/`. Keep hostname/port stable; after caching, also test with the local server stopped. Gaming Mode requires adding the browser/app as a non-Steam shortcut separately.
+4. **Updates:** reconnect after a deployment and return to the app. The old page must still work before acceptance. Choose **Update app** in Controls, verify the selected note URL, then disconnect and relaunch again. A game-data version changes only when the deployment includes a reviewed new snapshot.
+
+`tests/offline.spec.mjs` uses actual HTTP servers/workers in Chromium and mobile WebKit. It covers fresh offline launches, query aliases, graph/wiki/filter/local analysis, external-link degradation, nested scopes, waiting updates applied offline, other open tabs, scope-specific cleanup, failed/hash-mismatched deployments, and retry after failed installation. Chromium uses network emulation; WebKit tests stop the actual origin server because its devtools offline emulator can reject a cold worker navigation internally. Both require real worker responses with network resources unavailable; no route mock supplies offline content. A separate browser connection hint tests status/external-link behavior. The Chromium restart test also shuts down the origin and reopens a persistent browser profile. These engine tests complement physical-device checks; they cannot reproduce Home Screen storage policies or OS eviction. Preview tests block workers to isolate single-file behavior.
+
+To build a downloadable, self-contained ZIP of the PWA, pinned data, licenses, and generated vault:
+
+```sh
+npm run build:offline
+# Choose a fresh output directory when rebuilding:
+npm run build:offline -- --output /tmp/sts2-stars-offline
+npm run verify:v1 -- /tmp/sts2-stars-offline
+```
+
+This reuses the verified v1 distribution format and writes a deterministic `.zip` beside the new directory. Python 3's standard library supplies fixed ZIP timestamps; no additional package or npm runtime is needed to use it. Extract and run the included localhost `serve.py` on a computer, or host its files over HTTPS for phone installation. CI retains the `sts2-stars-v1` directory artifact and the explicit ZIP in `sts2-stars-offline` for 90 days. GitHub may wrap that ZIP in an artifact ZIP; extract the wrapper first. A release publisher can attach the inner ZIP directly. Distribution `manifest.json` remains the provenance record, separate from the PWA `manifest.webmanifest`. Checksums cover every worker/asset, and verification compares the worker to its packaged app/data.
 
 ## Normal update cycle
 
@@ -144,7 +180,7 @@ Inspect restored notes, install locked dependencies, regenerate the vault/site i
 
 ## Security maintenance
 
-`npm run check:security` enforces exact dependency versions matching the lockfile, source-script integrity, full commit pins for workflow actions, and agreement between the main ruleset's required checks and CI job names. `npm run check` includes this policy. CI uses Node 24-based Actions and the fixed `ubuntu-24.04` runner image. CI also audits all locked dependencies, including development libraries bundled into the site, and fails on high/critical advisories. Dependabot proposes weekly npm and GitHub Actions updates; there is no automatic merge. When updating Pixi/d3, update the source template's exact URL and SHA-384 integrity from the installed locked distribution, regenerate the site, and run browser checks.
+`npm run check:security` enforces exact locked dependencies, vendored distribution/license bytes, source-script integrity, full workflow action pins, and ruleset/CI check consistency. CI audits all locked dependencies and fails on high/critical advisories. Dependabot proposes updates without automatic merging. When updating Pixi/d3, copy the reviewed locked distribution and license into `vendor/`, update its local template path and SHA-384 integrity, regenerate the site/worker, and run browser checks.
 
 The validation workflows have read-only repository permissions. Only the scheduled/manual data-refresh job can write its update branch and PR, and dispatch its validation run. GitHub does not trigger push/pull-request workflows for events created by `GITHUB_TOKEN`; the refresh job explicitly dispatches `validate.yml` on its new branch so it receives all three required checks without another credential. Job timeouts and concurrency limits bound redundant work. Runtime data is escaped before entering HTML, and the production page executes bundled code without an unversioned third-party widget.
 

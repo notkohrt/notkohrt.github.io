@@ -9,6 +9,7 @@ import { validateModel } from '../lib/validate-model.mjs';
 import { verifyChecksums, writeChecksums } from '../lib/build-integrity.mjs';
 import { loadSnapshot } from './load-snapshot.mjs';
 import { renderPreview } from './build-preview.mjs';
+import { PWA_ASSETS, renderServiceWorker } from './build-pwa.mjs';
 import { buildVault, extractCurated, noteContent, parseCuratedLinks } from './build-vault.mjs';
 import { PROJECT_NAME, PROJECT_SLUG } from '../lib/project.mjs';
 
@@ -16,6 +17,7 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const git = promisify(execFile);
 const documents = ['CREDITS.md', 'vault/README.md', 'vault/Start Here.md', 'vault/.obsidian/app.json', 'vault/.obsidian/graph.json'];
 const dataFiles = [...Object.values(SOURCES), SOURCE_META_URL, 'data/manual-links.json'];
+const offlineFiles = [...new Set([...PWA_ASSETS, 'sw.js', 'serve.py', '.nojekyll'])].filter(file => !documents.includes(file));
 const sortLinks = links => links.sort((a, b) => a.source.localeCompare(b.source) || a.target.localeCompare(b.target) || a.relation.localeCompare(b.relation));
 
 function validModel(snapshot) {
@@ -37,7 +39,7 @@ export async function verifyV1(input) {
   const snapshot = await loadSnapshot(directory);
   const { nodes, edges } = validModel(snapshot);
   const paths = createNodePaths(nodes);
-  const expectedFiles = ['index.html', 'README.md', 'manifest.json', ...documents, ...dataFiles,
+  const expectedFiles = ['index.html', 'README.md', 'manifest.json', ...documents, ...dataFiles, ...offlineFiles,
     ...[...paths.values()].map(file => 'vault/' + file)].sort();
   if (!isDeepStrictEqual(files, expectedFiles)) throw new Error('Incomplete or unexpected v1 build files.');
   if (!isDeepStrictEqual(manifest.snapshot, snapshot.meta) || !isDeepStrictEqual(manifest.graph,
@@ -53,6 +55,9 @@ export async function verifyV1(input) {
   expectedSnapshot[SOURCE_META_URL] = snapshot.meta;
   expectedSnapshot['data/manual-links.json'] = snapshot.manualLinks;
   if (!isDeepStrictEqual(embedded, expectedSnapshot)) throw new Error('Website snapshot differs from packaged data.');
+  if (await readFile(path.join(directory, 'sw.js'), 'utf8') !== await renderServiceWorker(html, directory)) {
+    throw new Error('Offline worker differs from the packaged app/data.');
+  }
 
   // Use the same renderer and curator parser as generation; check every entity,
   // rather than accepting a plausible note count or a few representative cards.
@@ -78,10 +83,13 @@ function openingInstructions(manifest) {
 
 Extract the downloaded ZIP before opening its files.
 
-- Open \`index.html\` in a browser to use the graph. The interface, libraries, and pinned data are embedded in that file.
-- On iPhone or iPad, use a hosted copy in Safari. The Files HTML preview may display the page without executing JavaScript; it cannot be relied on for the interactive graph. The static opening message is browser guidance, and the spinner appears only after the app actually starts.
+- For reliable offline launches, open https://sts2stars.com/ online, wait for **Offline ready** in the footer, and install from your browser menu. On iPhone/iPad use Safari → Share → Add to Home Screen (Open as Web App); on Android use Chrome → Install app / Add to Home screen. Open the installed app once online and confirm **Offline ready** before testing airplane mode.
+- To run this complete extracted package on a computer or Steam Deck, run \`python3 serve.py\`, then open http://localhost:8123/ in your browser. All files are included; no npm installation, API, or CDN is needed. Keep that local server running while initially loading/installing the app. After **Offline ready**, the service worker can serve the installed app even with the server stopped. Keep the same hostname/port for that installation.
+- Direct \`index.html\` opening remains a portable preview. It is not the supported installation path: service workers require HTTPS or localhost, and iOS Files previews may not execute JavaScript. A phone cannot install a PWA from an ordinary HTTP LAN address; use the hosted HTTPS site or serve these files over trusted HTTPS.
 - Open the \`vault\` folder as an Obsidian vault, then read **Start Here**. The website and all entity notes contain the same ${manifest.graph.entities} entities and ${manifest.graph.relationships} relationships.
-- Read \`CREDITS.md\` for Mega Crit attribution and the pending artwork permission request. Online artwork availability is separate from the embedded interface and data.
+- Read \`CREDITS.md\` for Mega Crit attribution and the pending artwork permission request. The graph uses no remote artwork; external source/feedback links require internet access.
+
+The complete graph, descriptions, filters, inspector, deep links, relationships, and local deck import/export work offline. Cache versions include the entire embedded app, pinned JSON, install icons, libraries/licenses, and credits. New versions download and verify completely before activation; **Update app** in Controls applies a ready update and reloads the current URL. Updates never refresh the pinned dataset independently. Browser/OS storage deletion can remove an offline installation; reconnect and reload to restore it.
 
 ## Reproduce or edit this build
 
@@ -138,7 +146,7 @@ export async function buildV1(output = path.join(ROOT, 'dist', PROJECT_SLUG + '-
   // someone has opened and edited; cleanup owns only this invocation's output.
   await mkdir(destination);
   try {
-    for (const file of [...documents, ...dataFiles]) {
+    for (const file of [...documents, ...dataFiles, ...offlineFiles]) {
       if (!(await lstat(path.join(ROOT, file))).isFile()) throw new Error('Build input must be an ordinary file: ' + file);
       await mkdir(path.dirname(path.join(destination, file)), { recursive: true });
       await copyFile(path.join(ROOT, file), path.join(destination, file));

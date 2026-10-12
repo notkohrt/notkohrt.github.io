@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#1e1e1e">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="STS2 Stars">
 
   <title>STS2 Stars — Slay the Spire 2 Interaction Graph</title>
   <meta name="description" content="Explore cards, relics, powers, potions, enchantments, keywords, and their mechanical connections in Slay the Spire 2.">
@@ -167,10 +171,13 @@
       <div class="source-note source-note-stack">
         <div class="source-meta-row"><span>Data snapshot</span><span id="data-snapshot">loading…</span></div>
         <a href="https://github.com/nkhoit/spire-archive" target="_blank" rel="noreferrer">Spire Archive source ↗</a>
+        <p id="offline-help">Offline storage is being checked. Source and feedback links need internet access.</p>
+        <button class="ghost-button full-button hidden" id="app-update" type="button">Update app</button>
       </div>
     </aside>
 
     <main class="graph-stage" id="graph-stage">
+      <p class="online-notice hidden" id="online-notice" role="status"></p>
       <div id="graph-canvas" role="img" aria-label="Interactive Slay the Spire 2 relationship graph. Use Find a note to navigate with a keyboard."></div>
       <div class="connection-caption hidden" id="connection-caption">
         <span id="connection-caption-text" role="status"></span>
@@ -270,6 +277,7 @@
     <footer class="footer">
       <span class="project-credit">Slay the Spire 2 by <a href="https://www.megacrit.com/" target="_blank" rel="noreferrer">Mega Crit</a><span class="credit-context"> · Unofficial fan project</span></span>
       <span id="data-count"></span>
+      <span id="offline-status" role="status" aria-live="polite">Checking offline storage…</span>
     </footer>
   </div>
 
@@ -357,8 +365,8 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js" integrity="sha384-9oZ4NtPN/IdabMfsgMnEAm+FTH+xpnGN/C33Kz3OdcRyh9aaO2N6PuIONCebF1jh" crossorigin="anonymous" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous" defer></script>
+  <script src="./vendor/pixi-7.4.2.min.js" integrity="sha384-9oZ4NtPN/IdabMfsgMnEAm+FTH+xpnGN/C33Kz3OdcRyh9aaO2N6PuIONCebF1jh" crossorigin="anonymous" defer></script>
+  <script src="./vendor/d3-7.9.0.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous" defer></script>
   <script src="./app.js?v=20261007-5" type="module"></script>
 </body>
 </html>

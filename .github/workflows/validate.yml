@@ -39,9 +39,9 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Check graph semantics, exact deck probabilities, and website/vault parity
         run: npm run check
-      - name: Build and verify the complete v1 website and vault package
+      - name: Build and verify the complete offline PWA and vault package
         run: |
-          npm run build:v1
+          npm run build:offline -- --output dist/sts2-stars-v1
           npm run verify:v1 -- dist/sts2-stars-v1
       - name: Upload the complete v1 build
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -49,6 +49,13 @@ jobs:
           name: sts2-stars-v1
           path: dist/sts2-stars-v1/
           include-hidden-files: true
+          retention-days: 90
+          if-no-files-found: error
+      - name: Upload self-contained offline ZIP
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sts2-stars-offline
+          path: dist/sts2-stars-v1.zip
           retention-days: 90
           if-no-files-found: error
       - name: Create and restore a full-history recovery package
@@ -104,7 +111,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Install Chromium, WebKit, and system dependencies
         run: npx playwright install --with-deps chromium webkit
-      - name: Check previews, inspector, deck lab, and mobile/Safari startup
+      - name: Check previews, graph, mobile/Safari, offline launches, and atomic PWA updates
         run: npm run test:browser
       - name: Upload browser failure traces
         if: failure()

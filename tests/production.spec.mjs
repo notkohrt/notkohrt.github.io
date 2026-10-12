@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { loadSnapshot } from '../scripts/load-snapshot.mjs';
 import { validateModel } from '../lib/validate-model.mjs';
+import { CORE_FILES } from '../scripts/build-pwa.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const expectedHash = hash(await readFile(new URL('../index.html', import.meta.url)));
@@ -33,9 +34,11 @@ test('the live site serves this build and supports mobile search and relationshi
   }, { timeout: 180000, intervals: [1000, 2000, 5000, 10000], message: 'Live HTML must match the checked-out, pinned build' }).toBe(expectedHash);
 
   const errors = [], runtimeRequests = [];
+  const localRuntime = new Set([...CORE_FILES, 'sw.js'].map(file => new URL(file, baseURL).href));
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', req => {
-    if (['script', 'stylesheet', 'fetch', 'xhr'].includes(req.resourceType())) runtimeRequests.push(req.url());
+    if (['script', 'stylesheet', 'fetch', 'xhr'].includes(req.resourceType()) &&
+        !localRuntime.has(req.url().split('?')[0])) runtimeRequests.push(req.url());
   });
   const url = new URL(baseURL);
   url.searchParams.set('node', 'card:SHIV');

@@ -79,6 +79,9 @@ test('complete v1 builds are deterministic, match the website and vault, and pre
       return JSON.stringify(manifest);
     }, /manifest differs/);
   });
+  await t.test('matching checksums do not hide a mismatched offline worker', async () => {
+    await changed('sw.js', text => text.replace('const CONFIG =', '// Altered cache policy\nconst CONFIG ='), /Offline worker differs/);
+  });
   await t.test('unrelated hidden settings cannot enter a distribution', async () => {
     const extra = path.join(first.output, 'vault/.obsidian/plugins.json');
     await writeFile(extra, '[]\n');
