@@ -1,5 +1,6 @@
 import { test as base, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { renderPreview } from '../scripts/build-preview.mjs';
 
 const test = base.extend({
   page: async ({ page }, use) => {
@@ -110,7 +111,9 @@ test('mobile dialog contains focus, ignores graph hotkeys, and traces original m
 
 test('portable page works with storage denied, rejects malformed imports, and round-trips deck JSON', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('Storage denied', 'SecurityError'); } }));
-  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  // Portable exports intentionally omit installation metadata. WebKit eagerly
+  // requests a manifest even when every linked asset is blocked in this test.
+  const { html } = await renderPreview({ pwa: false });
   const requests = [];
   await page.route(/^https?:/, route => {
     if (route.request().isNavigationRequest() && new URL(route.request().url()).pathname === '/__deck-portable__') return route.fulfill({ body: html, contentType: 'text/html' });

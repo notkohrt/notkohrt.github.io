@@ -17,7 +17,7 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const git = promisify(execFile);
 const documents = ['CREDITS.md', 'vault/README.md', 'vault/Start Here.md', 'vault/.obsidian/app.json', 'vault/.obsidian/graph.json'];
 const dataFiles = [...Object.values(SOURCES), SOURCE_META_URL, 'data/manual-links.json'];
-const offlineFiles = [...new Set([...PWA_ASSETS, 'sw.js', 'serve.py'])].filter(file => !documents.includes(file));
+const offlineFiles = [...new Set([...PWA_ASSETS, 'sw.js', 'serve.py', '.nojekyll'])].filter(file => !documents.includes(file));
 const sortLinks = links => links.sort((a, b) => a.source.localeCompare(b.source) || a.target.localeCompare(b.target) || a.relation.localeCompare(b.relation));
 
 function validModel(snapshot) {

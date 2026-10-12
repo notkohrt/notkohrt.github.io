@@ -100,7 +100,7 @@ This reads the pinned repository data and existing curated blocks, and writes en
 
 ## Installed offline app
 
-The static GitHub Pages site is an installable PWA. `manifest.webmanifest` uses relative identity/start/scope URLs and original local 192/512px icons; the 512px image fits the maskable safe area. An Apple touch icon supports iOS installation. No backend, account, CDN, runtime game-data API, font download, or remote artwork is required. Graph/wiki behavior and the shared semantic/vault pipeline are unchanged.
+The static GitHub Pages site is an installable PWA. `.nojekyll` bypasses the legacy Pages/Jekyll pipeline so local assets are served as static files; the offline bundle includes the same marker for static hosting. `manifest.webmanifest` uses relative identity/start/scope URLs and original local 192/512px icons; the 512px image fits the maskable safe area. An Apple touch icon supports iOS installation. No backend, account, CDN, runtime game-data API, font download, or remote artwork is required. Graph/wiki behavior and the shared semantic/vault pipeline are unchanged.
 
 After loading online, wait for **Offline ready · v…** in the footer. This confirms a complete saved app, not just a registered worker. The status remains visible on mobile; entity counts remain available in the graph summary. Controls explains availability and exposes **Update app**. The displayed version is the pinned game-data version. Blocked storage, failed installation, insecure origins, file URLs, and sandboxed previews retain the self-contained graph and report that offline relaunch is unavailable.
 

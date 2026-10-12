@@ -40,7 +40,7 @@ test('downloadable offline ZIPs are deterministic and contain a complete verifie
   assert.deepEqual(await readFile(first.archive), await readFile(second.archive));
   const names = JSON.parse(execFileSync('python3', ['-c',
     'import sys,json,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; print(json.dumps(z.namelist()))', first.archive], { encoding: 'utf8' }));
-  for (const file of [...CORE_FILES, 'sw.js', 'serve.py', 'vault/Start Here.md', 'SHA256SUMS', 'manifest.json']) assert.ok(names.includes(file), file);
+  for (const file of [...CORE_FILES, 'sw.js', 'serve.py', '.nojekyll', 'vault/Start Here.md', 'SHA256SUMS', 'manifest.json']) assert.ok(names.includes(file), file);
   assert.ok(names.length > 1250);
   await assert.rejects(buildOffline(first.output), /output already exists/);
   const preview = path.join(directory, 'preview.html');
