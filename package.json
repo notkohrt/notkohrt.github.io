@@ -20,7 +20,7 @@
     "restore": "node scripts/restore-backup.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0",
+    "@playwright/test": "1.64.0",
     "d3": "7.9.0",
     "esbuild": "0.28.2",
     "pixi.js": "7.4.2"
