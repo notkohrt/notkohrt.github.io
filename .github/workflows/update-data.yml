@@ -32,6 +32,8 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Refresh pinned Spire Archive snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/update-data.mjs
 
       - name: Detect upstream changes
