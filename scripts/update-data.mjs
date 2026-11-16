@@ -10,7 +10,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (args.length === 1 && args[0] === '--recover') {
       console.log(await recoverSnapshot(root) ? 'Recovered interrupted snapshot update.' : 'No interrupted snapshot update.');
     } else if (!args.length) {
-      const result = await refreshSnapshot({ root });
+      const result = await refreshSnapshot({ root, githubToken: process.env.GH_TOKEN });
       console.log(result.changed ? 'Installed validated snapshot: ' + result.sourceCommit : 'Snapshot already current: ' + result.sourceCommit);
       console.log(result.nodes + ' notes, ' + result.edges + ' relationships.');
       if (result.changed) console.log('Next: review the dataset, regenerate the vault and site, and run npm run check.');

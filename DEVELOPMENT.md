@@ -146,6 +146,8 @@ This reuses the verified v1 distribution format and writes a deterministic `.zip
 
 The updater resolves one full upstream commit, downloads every file from that immutable commit, and validates the complete graph and current authored links before installing a staged directory. Failed downloads and validation never rewrite the existing snapshot. Installation retains the previous directory until the new snapshot is committed; a failed rename rolls back, and the next invocation recovers an interrupted updater after checking that its process has exited. The managed transaction is `data/.sts2-update/`, excluded from Git. Concurrent writers and recoveries are refused. The directory installation uses two renames, so do not run source-file readers or builds concurrently with a refresh. This protects against mixed snapshots and handles process interruptions; it is not a substitute for independent backups after hardware failure.
 
+The refresh workflow supplies its existing ephemeral `github.token` as `GH_TOKEN` for the upstream GitHub API ref lookup, avoiding the shared anonymous API quota on hosted runners. Local refreshes can optionally use `GH_TOKEN`; no new credential is required by CI. Authorization is sent only to `https://api.github.com`, never to raw snapshot downloads, and redirects are refused. HTTP errors report numeric rate-limit/reset/retry headers when present; a 403 alone does not establish rate limiting. A failed ref lookup happens before data download or installation and leaves the pinned snapshot intact.
+
 An unchanged upstream commit keeps every snapshot byte, including its original date. To recover an interrupted transaction without contacting upstream:
 
 ```sh

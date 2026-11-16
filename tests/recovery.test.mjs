@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { createBackup, restoreBackup } from '../lib/recovery.mjs';
 
 const git = (root, ...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -19,6 +20,7 @@ async function fixture(t) {
   git(root, 'init', '--quiet');
   git(root, 'config', 'user.name', 'Recovery test');
   git(root, 'config', 'user.email', 'recovery@example.invalid');
+  await writeFile(path.join(root, '.gitattributes'), '* text eol=lf\n');
   await writeFile(path.join(root, 'README.md'), 'Committed source\n');
   await writeFile(path.join(root, 'data/manual-links.json'), '[]\n');
   await writeFile(path.join(root, 'vault/Cards/Shiv.md'), 'Original note\n');
@@ -86,7 +88,7 @@ test('uncommitted source is reported rather than silently omitted from backups',
 test('shallow history is refused, and a detached full-history checkout restores its exact commit', async t => {
   const f = await fixture(t);
   const shallow = path.join(f.directory, 'shallow');
-  execFileSync('git', ['clone', '--quiet', '--depth', '1', 'file://' + f.root, shallow], { stdio: ['ignore', 'pipe', 'pipe'] });
+  execFileSync('git', ['clone', '--quiet', '--depth', '1', pathToFileURL(f.root).href, shallow], { stdio: ['ignore', 'pipe', 'pipe'] });
   await assert.rejects(createBackup({ root: shallow, output: f.output }), /full Git clone/);
   git(f.root, 'checkout', '--quiet', '--detach', 'HEAD~1');
   const backup = await createBackup(f);

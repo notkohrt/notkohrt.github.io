@@ -61,6 +61,48 @@ test('an unchanged commit preserves every byte and snapshot date without fetchin
   assert.equal(calls.length, 1);
 });
 
+for (const githubToken of ['', 'test-only-token']) {
+  test('ref authentication is API-only; raw downloads remain anonymous (' + (githubToken ? 'authenticated' : 'local') + ')', async t => {
+    const root = await fixture(t), requests = [];
+    const mock = upstream();
+    await refreshSnapshot({ root, githubToken, fetchImpl: async (url, options) => {
+      requests.push(url);
+      const headers = new Headers(options.headers);
+      const api = new URL(url).origin === 'https://api.github.com';
+      assert.equal(headers.get('authorization'), api && githubToken ? 'Bearer ' + githubToken : null);
+      assert.equal(options.redirect, 'error');
+      return mock(url);
+    } });
+    assert.equal(requests.length, 10);
+  });
+}
+
+for (const [status, headers] of [
+  [403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1794863270' }],
+  [403, {}],
+  [429, { 'retry-after': '60' }],
+  [401, { 'retry-after': 'untrusted response text' }]
+]) {
+  test('ref HTTP ' + status + ' preserves the snapshot and reports only safe diagnostics ' + JSON.stringify(headers), async t => {
+    const root = await fixture(t), before = await bytes(root);
+    let calls = 0;
+    await assert.rejects(refreshSnapshot({ root, githubToken: 'test-only-token', fetchImpl: async () => {
+      calls++;
+      return new Response('do not log test-only-token or arbitrary response bodies', { status, headers });
+    } }), error => {
+      assert.match(error.message, new RegExp('/git/ref/heads/main -> ' + status));
+      for (const [name, value] of Object.entries(headers)) {
+        if (/^\d+$/.test(value)) assert.ok(error.message.includes(name + '=' + value));
+      }
+      assert.doesNotMatch(error.message, /test-only-token|arbitrary|untrusted/);
+      return true;
+    });
+    assert.equal(calls, 1);
+    assert.deepEqual(await bytes(root), before);
+    assert.ok(!(await readdir(path.join(root, 'data'))).includes('.sts2-update'));
+  });
+}
+
 for (const [label, options, message] of [
   ['network failure', { overrides: { 'powers.json': new Error('Network disconnected') } }, /Network disconnected/],
   ['HTTP failure', { overrides: { 'powers.json': 'unavailable' } }, /503/],
@@ -80,7 +122,7 @@ for (const [label, options, message] of [
 test('a failed install restores the previous directory before reporting failure', async t => {
   const root = await fixture(t), before = await bytes(root);
   const renameFile = async (source, target) => {
-    if (source.endsWith('/staged')) throw new Error('Cannot install staged directory');
+    if (path.basename(source) === 'staged') throw new Error('Cannot install staged directory');
     return rename(source, target);
   };
   await assert.rejects(refreshSnapshot({ root, fetchImpl: upstream(), renameFile }), /Cannot install/);
@@ -93,10 +135,11 @@ test('an exited updater is recovered after it stops between directory renames', 
   const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
     import {refreshSnapshot} from ${JSON.stringify(new URL('../lib/snapshot-update.mjs', import.meta.url).href)};
     import {rename,readFile} from 'node:fs/promises';
+    import path from 'node:path';
     const payload = JSON.parse(await readFile(process.argv[2],'utf8'));
     await refreshSnapshot({root:process.argv[1], fetchImpl:async url => new Response(url.endsWith('/git/ref/heads/main') ? JSON.stringify({object:{sha:'${newSha}'}}) : payload[url.split('/').at(-1)]), renameFile:async (source,target) => {
       await rename(source,target);
-      if (target.endsWith('/previous')) process.exit(75);
+      if (path.basename(target) === 'previous') process.exit(75);
     }});
   `, root, path.join(root, 'upstream.json')], { encoding: 'utf8' });
   assert.equal(child.status, 75, child.stderr || child.error?.message);
